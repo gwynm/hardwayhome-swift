@@ -25,26 +25,28 @@ extension AppDatabase {
     }
 
     /// Finish a workout: set finished_at and compute cache fields.
+    /// Read phase (trackpoints, pulses, filtering, distance) runs outside the write lock
+    /// so it doesn't block concurrent inserts from GPS/BLE.
     func finishWorkout(_ workoutId: Int64, trackpointFilter: ([Trackpoint]) -> [Trackpoint]) throws {
-        try dbWriter.write { db in
-            let allTrackpoints = try Trackpoint
-                .filter(Trackpoint.Columns.workoutId == workoutId)
-                .order(Trackpoint.Columns.createdAt.asc)
-                .fetchAll(db)
+        // Read phase — no write lock held
+        let allTrackpoints = try getTrackpoints(workoutId)
+        let reliable = trackpointFilter(allTrackpoints)
+        let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
 
-            let reliable = trackpointFilter(allTrackpoints)
-            let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
+        var avgSecPerKm: Double? = nil
+        if distance > 0, reliable.count >= 2 {
+            let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
+            avgSecPerKm = totalSeconds / (distance / 1000)
+        }
 
-            var avgSecPerKm: Double? = nil
-            if distance > 0, reliable.count >= 2 {
-                let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
-                avgSecPerKm = totalSeconds / (distance / 1000)
-            }
-
-            let avgBpm = try Double.fetchOne(db, sql:
+        let avgBpm = try dbWriter.read { db in
+            try Double.fetchOne(db, sql:
                 "SELECT AVG(bpm) FROM pulses WHERE workout_id = ?", arguments: [workoutId])
+        }
 
-            let now = Date().timeIntervalSince1970
+        // Write phase — short, just the UPDATE
+        let now = Date().timeIntervalSince1970
+        try dbWriter.write { db in
             try db.execute(sql: """
                 UPDATE workouts
                 SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?
@@ -53,11 +55,9 @@ extension AppDatabase {
         }
     }
 
-    /// Delete a workout and all its trackpoints and pulses.
+    /// Delete a workout and all its trackpoints and pulses (cascaded by FK).
     func deleteWorkout(_ workoutId: Int64) throws {
         try dbWriter.write { db in
-            try db.execute(sql: "DELETE FROM pulses WHERE workout_id = ?", arguments: [workoutId])
-            try db.execute(sql: "DELETE FROM trackpoints WHERE workout_id = ?", arguments: [workoutId])
             try db.execute(sql: "DELETE FROM workouts WHERE id = ?", arguments: [workoutId])
         }
     }
@@ -132,14 +132,17 @@ extension AppDatabase {
         }
     }
 
-    /// Get average BPM over the last N seconds for a workout.
-    func getRecentAvgBpm(_ workoutId: Int64, seconds: Int) throws -> Double? {
-        try dbWriter.read { db in
-            let cutoff = Date().timeIntervalSince1970 - Double(seconds)
-            return try Double.fetchOne(db, sql: """
-                SELECT AVG(bpm) FROM pulses
-                WHERE workout_id = ? AND created_at >= ?
-                """, arguments: [workoutId, cutoff])
+
+}
+
+// MARK: - Bulk operations
+
+extension AppDatabase {
+
+    /// Delete all workout data (workouts, trackpoints, pulses via CASCADE).
+    func clearAllWorkoutData() throws {
+        try dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM workouts")
         }
     }
 }

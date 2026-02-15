@@ -6,13 +6,11 @@ struct RouteMapView: View {
     let trackpoints: [Trackpoint]
 
     var body: some View {
-        if trackpoints.count < 2 { return AnyView(EmptyView()) }
+        if trackpoints.count >= 2 {
+            let coordinates = trackpoints.map {
+                CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
+            }
 
-        let coordinates = trackpoints.map {
-            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
-        }
-
-        return AnyView(
             VStack(alignment: .leading, spacing: 0) {
                 Text("Route")
                     .font(.system(size: 15, weight: .semibold))
@@ -33,7 +31,7 @@ struct RouteMapView: View {
             }
             .padding(.top, 24)
             .padding(.horizontal, 16)
-        )
+        }
     }
 
     private func cameraPosition(for coords: [CLLocationCoordinate2D]) -> MapCameraPosition {

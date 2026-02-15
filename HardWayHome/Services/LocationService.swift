@@ -1,5 +1,8 @@
 import Foundation
 import CoreLocation
+import os
+
+private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "location")
 
 /// GPS status quality, matching the trackpoint filter thresholds.
 enum GpsStatus: Sendable {
@@ -125,12 +128,16 @@ extension LocationService: CLLocationManagerDelegate {
 
                 // Write trackpoint if workout is active
                 if let workoutId = activeWorkoutId {
-                    try? db.insertTrackpoint(
-                        workoutId: workoutId,
-                        lat: location.coordinate.latitude,
-                        lng: location.coordinate.longitude,
-                        speed: location.speed >= 0 ? location.speed : nil,
-                        err: acc >= 0 ? acc : nil)
+                    do {
+                        try db.insertTrackpoint(
+                            workoutId: workoutId,
+                            lat: location.coordinate.latitude,
+                            lng: location.coordinate.longitude,
+                            speed: location.speed >= 0 ? location.speed : nil,
+                            err: acc >= 0 ? acc : nil)
+                    } catch {
+                        log.error("Failed to insert trackpoint: \(error)")
+                    }
                 }
             }
         }

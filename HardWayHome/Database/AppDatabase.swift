@@ -17,7 +17,7 @@ final class AppDatabase: Sendable {
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
 
-        migrator.registerMigration("v2_epochs") { db in
+        migrator.registerMigration("v3") { db in
             try db.execute(sql: """
                 CREATE TABLE workouts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,8 +29,8 @@ final class AppDatabase: Sendable {
                 );
 
                 CREATE TABLE trackpoints (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    workout_id INTEGER NOT NULL REFERENCES workouts(id),
+                    id INTEGER PRIMARY KEY,
+                    workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
                     created_at REAL NOT NULL,
                     lat REAL NOT NULL,
                     lng REAL NOT NULL,
@@ -39,8 +39,8 @@ final class AppDatabase: Sendable {
                 );
 
                 CREATE TABLE pulses (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    workout_id INTEGER NOT NULL REFERENCES workouts(id),
+                    id INTEGER PRIMARY KEY,
+                    workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
                     created_at REAL NOT NULL,
                     bpm INTEGER NOT NULL
                 );

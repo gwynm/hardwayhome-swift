@@ -57,11 +57,7 @@ final class SettingsVM {
     }
 
     func clearAllWorkoutData() {
-        try? db.dbWriter.write { db in
-            try db.execute(sql: "DELETE FROM pulses")
-            try db.execute(sql: "DELETE FROM trackpoints")
-            try db.execute(sql: "DELETE FROM workouts")
-        }
+        try? db.clearAllWorkoutData()
     }
 
     func clearSettings() {

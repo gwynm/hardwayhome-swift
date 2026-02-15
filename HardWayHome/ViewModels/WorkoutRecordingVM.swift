@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "workout")
 
 /// Central view model for workout start/stop/resume lifecycle.
 @MainActor
@@ -21,50 +24,64 @@ final class WorkoutRecordingVM {
 
     /// Initialize on app launch — request permissions and check for active workout.
     func initialize() async {
-        // Initialize database (shared instance triggers migration)
         _ = db
 
-        // Request GPS + BLE permissions upfront so status pills are live
         locationService.requestPermissions()
         locationService.startMonitoring()
         heartRateService.initialize()
-
-        // Initialize backup status
         backupService.initStatus()
 
-        // Check for active workout (resume after kill)
-        if let workout = try? db.getActiveWorkout() {
-            activeWorkout = workout
-            heartRateService.setActiveWorkoutId = workout.id
-            locationService.startTracking(workoutId: workout.id!)
+        // Resume active workout if app was killed mid-run
+        do {
+            if let workout = try db.getActiveWorkout() {
+                activeWorkout = workout
+                heartRateService.setActiveWorkoutId = workout.id
+                locationService.startTracking(workoutId: workout.id!)
+            }
+        } catch {
+            log.error("Failed to check for active workout: \(error)")
         }
 
         isLoading = false
     }
 
     func start() {
-        guard let workoutId = try? db.startWorkout() else { return }
-        activeWorkout = try? db.getActiveWorkout()
-        heartRateService.setActiveWorkoutId = workoutId
-        locationService.startTracking(workoutId: workoutId)
+        do {
+            let workoutId = try db.startWorkout()
+            activeWorkout = try db.getActiveWorkout()
+            heartRateService.setActiveWorkoutId = workoutId
+            locationService.startTracking(workoutId: workoutId)
+        } catch {
+            log.error("Failed to start workout: \(error)")
+        }
     }
 
     func finish() {
         guard let workout = activeWorkout, let id = workout.id else { return }
         locationService.stopTracking()
         heartRateService.setActiveWorkoutId = nil
-        try? db.finishWorkout(id, trackpointFilter: TrackpointFilter.filterReliable)
+        do {
+            try db.finishWorkout(id, trackpointFilter: TrackpointFilter.filterReliable)
+        } catch {
+            log.error("Failed to finish workout \(id): \(error)")
+        }
         activeWorkout = nil
-
-        // Backup (non-blocking)
         Task { await backupService.backupDatabase() }
+    }
+
+    func workoutHistory() throws -> [Workout] {
+        try db.getWorkoutHistory()
     }
 
     func discard() {
         guard let workout = activeWorkout, let id = workout.id else { return }
         locationService.stopTracking()
         heartRateService.setActiveWorkoutId = nil
-        try? db.deleteWorkout(id)
+        do {
+            try db.deleteWorkout(id)
+        } catch {
+            log.error("Failed to delete workout \(id): \(error)")
+        }
         activeWorkout = nil
     }
 }

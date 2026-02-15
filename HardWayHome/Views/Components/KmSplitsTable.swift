@@ -5,9 +5,7 @@ struct KmSplitsTable: View {
     let splits: [KmSplit]
 
     var body: some View {
-        if splits.isEmpty { return AnyView(EmptyView()) }
-
-        return AnyView(
+        if !splits.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Km Splits")
                     .font(.system(size: 15, weight: .semibold))
@@ -53,6 +51,6 @@ struct KmSplitsTable: View {
             }
             .padding(.top, 24)
             .padding(.horizontal, 16)
-        )
+        }
     }
 }

@@ -86,14 +86,14 @@ struct QueriesTests {
         let db = try makeDB()
 
         let id1 = try db.dbWriter.write { conn -> Int64 in
-            var w = Workout(startedAt: epoch("2026-02-13T10:00:00Z"))
+            let w = Workout(startedAt: epoch("2026-02-13T10:00:00Z"))
             try w.insert(conn)
             return conn.lastInsertedRowID
         }
         try db.finishWorkout(id1, trackpointFilter: { $0 })
 
         let id2 = try db.dbWriter.write { conn -> Int64 in
-            var w = Workout(startedAt: epoch("2026-02-13T11:00:00Z"))
+            let w = Workout(startedAt: epoch("2026-02-13T11:00:00Z"))
             try w.insert(conn)
             return conn.lastInsertedRowID
         }

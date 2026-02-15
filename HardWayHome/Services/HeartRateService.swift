@@ -1,5 +1,8 @@
 import Foundation
 @preconcurrency import CoreBluetooth
+import os
+
+private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "heartrate")
 
 /// BLE connection state.
 enum HrConnectionState: Sendable {
@@ -277,7 +280,11 @@ extension HeartRateService: CBPeripheralDelegate {
             if let bpm = parseHeartRate(data) {
                 currentBpm = bpm
                 if let workoutId = activeWorkoutId {
-                    try? db.insertPulse(workoutId: workoutId, bpm: bpm)
+                    do {
+                        try db.insertPulse(workoutId: workoutId, bpm: bpm)
+                    } catch {
+                        log.error("Failed to insert pulse: \(error)")
+                    }
                 }
             }
         }

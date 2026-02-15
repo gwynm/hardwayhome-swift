@@ -1,7 +1,4 @@
 import SwiftUI
-import os
-
-private let perfLog = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "perf")
 
 struct WorkoutDetailView: View {
     let workoutId: Int64
@@ -13,25 +10,18 @@ struct WorkoutDetailView: View {
         self.workoutId = workoutId
         self.onBack = onBack
 
-        let t0 = CFAbsoluteTimeGetCurrent()
-
         guard let workout = try? db.getWorkout(workoutId),
               workout.finishedAt != nil else {
             _data = State(initialValue: nil)
             return
         }
 
-        let t1 = CFAbsoluteTimeGetCurrent()
         let allTrackpoints = (try? db.getTrackpoints(workoutId)) ?? []
-        let t2 = CFAbsoluteTimeGetCurrent()
         let trackpoints = TrackpointFilter.filterReliable(allTrackpoints)
-        let t3 = CFAbsoluteTimeGetCurrent()
         let pulses = (try? db.getPulses(workoutId)) ?? []
-        let t4 = CFAbsoluteTimeGetCurrent()
         let distance = PaceCalc.trackpointDistance(trackpoints)
         let elapsedSeconds = max(0, workout.finishedAt! - workout.startedAt)
         let splits = SplitCalc.computeKmSplits(trackpoints: trackpoints, pulses: pulses)
-        let t5 = CFAbsoluteTimeGetCurrent()
 
         _data = State(initialValue: DetailData(
             workout: workout,
@@ -39,19 +29,6 @@ struct WorkoutDetailView: View {
             distance: distance,
             elapsedSeconds: elapsedSeconds,
             splits: splits))
-
-        let ms = { (a: CFAbsoluteTime, b: CFAbsoluteTime) -> String in
-            String(format: "%.1f", (b - a) * 1000)
-        }
-        perfLog.warning("""
-        [PERF] WorkoutDetail init (\(allTrackpoints.count) tp, \(pulses.count) pulses):
-          getWorkout:      \(ms(t0, t1))ms
-          getTrackpoints:  \(ms(t1, t2))ms
-          filterReliable:  \(ms(t2, t3))ms
-          getPulses:       \(ms(t3, t4))ms
-          dist+splits:     \(ms(t4, t5))ms
-          TOTAL:           \(ms(t0, t5))ms
-        """)
     }
 
     var body: some View {

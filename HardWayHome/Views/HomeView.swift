@@ -59,6 +59,6 @@ struct HomeView: View {
     }
 
     private func loadHistory() {
-        workouts = (try? AppDatabase.shared.getWorkoutHistory()) ?? []
+        workouts = (try? vm.workoutHistory()) ?? []
     }
 }
