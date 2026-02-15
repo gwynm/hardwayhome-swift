@@ -57,7 +57,9 @@ struct WorkoutView: View {
             }
             .onAppear {
                 UIApplication.shared.isIdleTimerDisabled = true
-                statsVM.observe(workoutId: workout.id!, startedAt: workout.startedAt)
+                statsVM.observe(workoutId: workout.id!, startedAt: workout.startedAt,
+                                locationService: vm.locationService,
+                                heartRateService: vm.heartRateService)
             }
             .onDisappear {
                 UIApplication.shared.isIdleTimerDisabled = false

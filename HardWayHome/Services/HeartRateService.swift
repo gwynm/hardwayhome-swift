@@ -31,6 +31,9 @@ final class HeartRateService: NSObject {
     private(set) var currentBpm: Int? = nil
     private(set) var discoveredDevices: [HrDevice] = []
 
+    /// Called on the main actor after a pulse is successfully inserted.
+    var onPulseInserted: ((Pulse) -> Void)?
+
     private var centralManager: CBCentralManager?
     private var connectedPeripheral: CBPeripheral?
     private var activeWorkoutId: Int64? = nil
@@ -281,7 +284,8 @@ extension HeartRateService: CBPeripheralDelegate {
                 currentBpm = bpm
                 if let workoutId = activeWorkoutId {
                     do {
-                        try db.insertPulse(workoutId: workoutId, bpm: bpm)
+                        let pulse = try db.insertPulse(workoutId: workoutId, bpm: bpm)
+                        onPulseInserted?(pulse)
                     } catch {
                         log.error("Failed to insert pulse: \(error)")
                     }

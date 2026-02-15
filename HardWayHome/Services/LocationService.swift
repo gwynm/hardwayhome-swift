@@ -20,6 +20,9 @@ final class LocationService: NSObject {
     private(set) var gpsStatus: GpsStatus = .none
     private(set) var accuracy: Double? = nil
 
+    /// Called on the main actor after a trackpoint is successfully inserted.
+    var onTrackpointInserted: ((Trackpoint) -> Void)?
+
     private var locationManager: CLLocationManager?
     private var activeWorkoutId: Int64? = nil
     private let db: AppDatabase
@@ -129,12 +132,13 @@ extension LocationService: CLLocationManagerDelegate {
                 // Write trackpoint if workout is active
                 if let workoutId = activeWorkoutId {
                     do {
-                        try db.insertTrackpoint(
+                        let tp = try db.insertTrackpoint(
                             workoutId: workoutId,
                             lat: location.coordinate.latitude,
                             lng: location.coordinate.longitude,
                             speed: location.speed >= 0 ? location.speed : nil,
                             err: acc >= 0 ? acc : nil)
+                        onTrackpointInserted?(tp)
                     } catch {
                         log.error("Failed to insert trackpoint: \(error)")
                     }

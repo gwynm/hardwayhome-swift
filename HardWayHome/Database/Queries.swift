@@ -84,11 +84,12 @@ extension AppDatabase {
 
 extension AppDatabase {
 
-    /// Insert a trackpoint.
+    /// Insert a trackpoint and return the inserted record.
+    @discardableResult
     func insertTrackpoint(workoutId: Int64, lat: Double, lng: Double,
-                          speed: Double?, err: Double?) throws {
+                          speed: Double?, err: Double?) throws -> Trackpoint {
         try dbWriter.write { db in
-            _ = try Trackpoint(
+            try Trackpoint(
                 workoutId: workoutId,
                 createdAt: Date().timeIntervalSince1970,
                 lat: lat, lng: lng, speed: speed, err: err)
@@ -111,10 +112,11 @@ extension AppDatabase {
 
 extension AppDatabase {
 
-    /// Insert a heart rate pulse reading.
-    func insertPulse(workoutId: Int64, bpm: Int) throws {
+    /// Insert a heart rate pulse reading and return the inserted record.
+    @discardableResult
+    func insertPulse(workoutId: Int64, bpm: Int) throws -> Pulse {
         try dbWriter.write { db in
-            _ = try Pulse(
+            try Pulse(
                 workoutId: workoutId,
                 createdAt: Date().timeIntervalSince1970,
                 bpm: bpm)

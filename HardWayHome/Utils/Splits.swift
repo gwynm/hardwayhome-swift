@@ -7,39 +7,57 @@ enum SplitCalc {
     static func computeKmSplits(trackpoints: [Trackpoint], pulses: [Pulse]) -> [KmSplit] {
         guard trackpoints.count >= 2 else { return [] }
 
-        var splits: [KmSplit] = []
-        var cumulativeDistance = 0.0
-        var splitStartEpoch = trackpoints[0].createdAt
-        var nextKmBoundary = 1000.0
-        var pulseIdx = 0
+        var state = SplitState()
+        for tp in trackpoints {
+            state.advance(newTrackpoint: tp, pulses: pulses)
+        }
+        return state.splits
+    }
 
-        for i in 1..<trackpoints.count {
-            let segDist = Geo.haversineMetres(
-                trackpoints[i - 1].lat, trackpoints[i - 1].lng,
-                trackpoints[i].lat, trackpoints[i].lng)
+    // MARK: - Incremental split state
+
+    /// Maintains cursor state for incremental km-split computation.
+    /// Feed reliable trackpoints one at a time via `advance(newTrackpoint:pulses:)`.
+    struct SplitState {
+        var splits: [KmSplit] = []
+        private(set) var cumulativeDistance: Double = 0
+        private var splitStartEpoch: Double = 0
+        private var nextKmBoundary: Double = 1000
+        private var pulseIdx: Int = 0
+        private var lastTrackpoint: Trackpoint? = nil
+
+        /// Process a new reliable trackpoint, emitting a split if a km boundary is crossed.
+        mutating func advance(newTrackpoint tp: Trackpoint, pulses: [Pulse]) {
+            guard let prev = lastTrackpoint else {
+                lastTrackpoint = tp
+                splitStartEpoch = tp.createdAt
+                return
+            }
+
+            let segDist = Geo.haversineMetres(prev.lat, prev.lng, tp.lat, tp.lng)
             cumulativeDistance += segDist
+            lastTrackpoint = tp
 
             if cumulativeDistance >= nextKmBoundary {
-                let splitEndEpoch = trackpoints[i].createdAt
-                let seconds = splitEndEpoch - splitStartEpoch
+                let seconds = tp.createdAt - splitStartEpoch
 
                 let avgBpm = averageBpmInWindow(
                     pulses: pulses, startIdx: pulseIdx,
-                    startSec: splitStartEpoch, endSec: splitEndEpoch)
+                    startSec: splitStartEpoch, endSec: tp.createdAt)
                 pulseIdx = advancePulseIdx(
-                    pulses: pulses, currentIdx: pulseIdx, endSec: splitEndEpoch)
+                    pulses: pulses, currentIdx: pulseIdx, endSec: tp.createdAt)
 
                 splits.append(KmSplit(km: splits.count + 1, seconds: seconds, avgBpm: avgBpm))
 
-                splitStartEpoch = splitEndEpoch
+                splitStartEpoch = tp.createdAt
                 nextKmBoundary += 1000
             }
         }
-
-        return splits
     }
 
-    private static func averageBpmInWindow(
+    // MARK: - Pulse helpers
+
+    static func averageBpmInWindow(
         pulses: [Pulse], startIdx: Int, startSec: Double, endSec: Double
     ) -> Double? {
         var sum = 0.0
@@ -57,7 +75,7 @@ enum SplitCalc {
         return count > 0 ? sum / Double(count) : nil
     }
 
-    private static func advancePulseIdx(
+    static func advancePulseIdx(
         pulses: [Pulse], currentIdx: Int, endSec: Double
     ) -> Int {
         var idx = currentIdx

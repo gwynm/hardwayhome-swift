@@ -13,17 +13,23 @@ enum TrackpointFilter {
         var result: [Trackpoint] = []
 
         for tp in trackpoints {
-            guard let err = tp.err, err < gpsErrThreshold else { continue }
-
-            if let prev = result.last {
-                let dist = Geo.haversineMetres(prev.lat, prev.lng, tp.lat, tp.lng)
-                let dt = tp.createdAt - prev.createdAt
-                if dt > 0, dist / dt > maxSpeedMs { continue }
-            }
-
+            guard isReliable(tp, after: result.last) else { continue }
             result.append(tp)
         }
 
         return result
+    }
+
+    /// Check whether a single trackpoint is reliable given the previous reliable point.
+    static func isReliable(_ tp: Trackpoint, after lastReliable: Trackpoint?) -> Bool {
+        guard let err = tp.err, err < gpsErrThreshold else { return false }
+
+        if let prev = lastReliable {
+            let dist = Geo.haversineMetres(prev.lat, prev.lng, tp.lat, tp.lng)
+            let dt = tp.createdAt - prev.createdAt
+            if dt > 0, dist / dt > maxSpeedMs { return false }
+        }
+
+        return true
     }
 }
