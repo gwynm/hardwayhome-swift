@@ -11,6 +11,9 @@ xcuserdata/
 .build/
 Package.resolved
 
+# Auto-generated
+HardWayHome/BuildInfo.swift
+
 # macOS
 .DS_Store
 

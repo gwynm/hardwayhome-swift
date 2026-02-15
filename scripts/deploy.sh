@@ -9,6 +9,9 @@ cd "$(dirname "$0")/.."
 SCHEME="HardWayHome"
 DEVICE_ID="00008101-001344591151003A"
 
+echo "==> Generating build info..."
+./scripts/generate-build-info.sh
+
 echo "==> Generating Xcode project..."
 xcodegen generate
 

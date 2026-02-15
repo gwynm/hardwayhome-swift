@@ -49,7 +49,9 @@ final class BackupService {
         let timestamp = Self.timestampString()
         let filename = "hardwayhome-\(timestamp).sqlite"
 
-        guard let snapshotURL = createSnapshot(filename: filename) else {
+        let snapshot = createSnapshot(filename: filename)
+        guard let snapshotURL = snapshot.url else {
+            print("[Backup] \(snapshot.error ?? "unknown error")")
             return .failed
         }
 
@@ -86,8 +88,9 @@ final class BackupService {
         let filename = "hardwayhome-\(timestamp).sqlite"
 
         onLog("Creating database snapshot (VACUUM INTO)...")
-        guard let snapshotURL = createSnapshot(filename: filename) else {
-            onLog("ERROR: Failed to create snapshot")
+        let snapshot = createSnapshot(filename: filename)
+        guard let snapshotURL = snapshot.url else {
+            onLog("ERROR: \(snapshot.error ?? "Failed to create snapshot")")
             return false
         }
         onLog("Snapshot created: \(snapshotURL.path)")
@@ -153,9 +156,12 @@ final class BackupService {
 
     // MARK: - Snapshot
 
-    /// Create a VACUUM INTO snapshot. Returns the file URL, or nil on failure.
-    private func createSnapshot(filename: String) -> URL? {
-        guard db.databasePath != nil else { return nil }
+    /// Create a VACUUM INTO snapshot. Returns the file URL and nil error, or nil URL and error description.
+    private func createSnapshot(filename: String) -> (url: URL?, error: String?) {
+        guard let dbPath = db.databasePath else {
+            return (nil, "databasePath is nil (in-memory database?)")
+        }
+
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         let snapshotURL = cacheDir.appendingPathComponent(filename)
 
@@ -163,13 +169,14 @@ final class BackupService {
         try? FileManager.default.removeItem(at: snapshotURL)
 
         do {
-            try db.dbWriter.read { dbConn in
-                try dbConn.execute(sql: "VACUUM INTO '\(snapshotURL.path)'")
+            // VACUUM INTO cannot run inside a transaction, so use
+            // writeWithoutTransaction to get a bare connection.
+            try db.dbWriter.writeWithoutTransaction { dbConn in
+                try dbConn.execute(sql: "VACUUM INTO ?", arguments: [snapshotURL.path])
             }
-            return snapshotURL
+            return (snapshotURL, nil)
         } catch {
-            print("[Backup] VACUUM INTO failed: \(error)")
-            return nil
+            return (nil, "VACUUM INTO failed (dbPath=\(dbPath)): \(error)")
         }
     }
 

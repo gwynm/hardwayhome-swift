@@ -25,6 +25,10 @@ targets:
       - HardWayHome
     dependencies:
       - package: GRDB
+    preBuildScripts:
+      - script: "${PROJECT_DIR}/scripts/generate-build-info.sh"
+        name: Generate Build Info
+        basedOnDependencyAnalysis: false
     settings:
       base:
         INFOPLIST_FILE: HardWayHome/Info.plist
@@ -32,6 +36,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.gwynmorfey.hardwayhome.native
         CODE_SIGN_STYLE: Automatic
         SWIFT_STRICT_CONCURRENCY: targeted
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: HardWayHome/Info.plist
       properties:

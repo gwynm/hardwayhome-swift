@@ -19,6 +19,7 @@ struct WorkoutView: View {
                                      currentBpm: vm.heartRateService.currentBpm,
                                      onTap: { showBlePicker = true })
                         BackupStatusPill(status: vm.backupService.status)
+                        Spacer()
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)

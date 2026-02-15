@@ -19,20 +19,18 @@ final class WorkoutRecordingVM {
         self.backupService = BackupService(db: db)
     }
 
-    /// Initialize on app launch — check for active workout.
-    /// Permissions are requested lazily when starting a workout (better UX).
+    /// Initialize on app launch — request permissions and check for active workout.
     func initialize() async {
         // Initialize database (shared instance triggers migration)
         _ = db
 
-        // Initialize BLE (does not trigger permission dialog)
+        // Request GPS + BLE permissions upfront so status pills are live
+        locationService.requestPermissions()
+        locationService.startMonitoring()
         heartRateService.initialize()
 
         // Initialize backup status
         backupService.initStatus()
-
-        // Auto-reconnect to last HR monitor
-        heartRateService.reconnectToLastDevice()
 
         // Check for active workout (resume after kill)
         if let workout = try? db.getActiveWorkout() {
@@ -45,13 +43,6 @@ final class WorkoutRecordingVM {
     }
 
     func start() {
-        // Request location permission if not yet granted
-        if !locationService.hasWhenInUsePermission {
-            locationService.requestPermissions()
-            // Permission dialog will appear — actual start deferred
-            // For now, start anyway; tracking will begin once permission is granted
-        }
-
         guard let workoutId = try? db.startWorkout() else { return }
         activeWorkout = try? db.getActiveWorkout()
         heartRateService.setActiveWorkoutId = workoutId

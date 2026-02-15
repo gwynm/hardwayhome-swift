@@ -170,7 +170,13 @@ final class HeartRateService: NSObject {
 extension HeartRateService: CBCentralManagerDelegate {
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        // Required. No action needed.
+        let state = central.state
+        Task { @MainActor in
+            if state == .poweredOn {
+                // Auto-reconnect to last known HR monitor when BLE becomes ready
+                self.reconnectToLastDevice()
+            }
+        }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager,

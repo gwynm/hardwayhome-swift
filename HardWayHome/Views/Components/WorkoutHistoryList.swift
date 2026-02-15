@@ -35,7 +35,7 @@ struct WorkoutHistoryList: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .overlay(alignment: .bottom) {
-                    Divider().background(Color(white: 0.22))
+                    Rectangle().fill(Color(white: 0.22)).frame(height: 1.0 / UIScreen.main.scale)
                 }
 
                 // Rows
@@ -58,7 +58,7 @@ struct WorkoutHistoryList: View {
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .overlay(alignment: .bottom) {
-                                    Divider().background(Color(white: 0.17))
+                                    Rectangle().fill(Color(white: 0.17)).frame(height: 1.0 / UIScreen.main.scale)
                                 }
                             }
                         }

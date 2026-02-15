@@ -28,18 +28,18 @@ final class LocationService: NSObject {
 
     // MARK: - Permissions
 
+    /// Request When-In-Use on startup. Always is requested later when starting a workout.
     func requestPermissions() {
         let manager = getOrCreateManager()
         if manager.authorizationStatus == .notDetermined {
             manager.requestWhenInUseAuthorization()
-        } else if manager.authorizationStatus == .authorizedWhenInUse {
-            manager.requestAlwaysAuthorization()
         }
     }
 
+    /// Escalate to Always permission (needed for background tracking during workouts).
     func requestAlwaysPermission() {
         let manager = getOrCreateManager()
-        if manager.authorizationStatus != .authorizedAlways {
+        if manager.authorizationStatus == .authorizedWhenInUse {
             manager.requestAlwaysAuthorization()
         }
     }
@@ -55,23 +55,42 @@ final class LocationService: NSObject {
         return manager.authorizationStatus == .authorizedAlways
     }
 
-    // MARK: - Tracking
+    // MARK: - Monitoring (foreground, for GPS status display)
+
+    /// Start high-accuracy location updates so the GPS status pill is correct.
+    /// Called on launch — does not record trackpoints (no activeWorkoutId).
+    func startMonitoring() {
+        let manager = getOrCreateManager()
+        guard manager.authorizationStatus == .authorizedWhenInUse
+                || manager.authorizationStatus == .authorizedAlways else { return }
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = 5
+        manager.activityType = .fitness
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.allowsBackgroundLocationUpdates = false
+        manager.showsBackgroundLocationIndicator = false
+        manager.startUpdatingLocation()
+    }
+
+    // MARK: - Tracking (active workout)
 
     func startTracking(workoutId: Int64) {
         activeWorkoutId = workoutId
         let manager = getOrCreateManager()
-        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = 5  // metres
-        manager.activityType = .fitness
+        // Escalate to Always for background tracking if needed
+        if manager.authorizationStatus == .authorizedWhenInUse {
+            manager.requestAlwaysAuthorization()
+        }
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
-        manager.pausesLocationUpdatesAutomatically = false
         manager.startUpdatingLocation()
     }
 
     func stopTracking() {
         activeWorkoutId = nil
-        locationManager?.stopUpdatingLocation()
+        // Disable background updates but keep monitoring for status
+        locationManager?.allowsBackgroundLocationUpdates = false
+        locationManager?.showsBackgroundLocationIndicator = false
     }
 
     // MARK: - Private
@@ -128,9 +147,9 @@ extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         Task { @MainActor in
-            if status == .authorizedWhenInUse {
-                // Automatically request Always after WhenInUse is granted
-                self.locationManager?.requestAlwaysAuthorization()
+            if status == .authorizedWhenInUse || status == .authorizedAlways {
+                // Start monitoring as soon as we have any permission
+                if activeWorkoutId == nil { startMonitoring() }
             }
         }
     }

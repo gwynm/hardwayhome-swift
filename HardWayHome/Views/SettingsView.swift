@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var vm: SettingsVM
     let onBack: () -> Void
+    @State private var seedConfirmation: String? = nil
+    @State private var showClearConfirm = false
+    @State private var clearConfirmation: String? = nil
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -119,8 +122,77 @@ struct SettingsView: View {
                         .padding(.vertical, 14)
                     }
 
+                    // Developer tools
+                    Text("DEVELOPER")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(white: 0.56))
+                        .tracking(0.5)
+                        .padding(.top, 32)
+                        .padding(.bottom, 16)
+
+                    Button(action: {
+                        vm.generateSeedData()
+                        seedConfirmation = "Added 3 sample workouts"
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            seedConfirmation = nil
+                        }
+                    }) {
+                        Text("Generate Sample Data")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(white: 0.17))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    if let msg = seedConfirmation {
+                        Text(msg)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.green)
+                            .padding(.top, 8)
+                    }
+
+                    Text("Replaces all existing workouts with 3 sample runs (5k, 3k, 8k).")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(white: 0.56))
+                        .lineSpacing(4)
+                        .padding(.top, 8)
+
+                    // Clear workout data
+                    Button(action: { showClearConfirm = true }) {
+                        Text("Clear Workout Data")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(white: 0.17))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .padding(.top, 16)
+                    .alert("Clear All Workout Data?",
+                           isPresented: $showClearConfirm) {
+                        Button("Delete All", role: .destructive) {
+                            vm.clearAllWorkoutData()
+                            clearConfirmation = "All workout data cleared"
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                clearConfirmation = nil
+                            }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This will permanently delete all workouts, trackpoints, and heart rate data. This cannot be undone.")
+                    }
+
+                    if let msg = clearConfirmation {
+                        Text(msg)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.green)
+                            .padding(.top, 8)
+                    }
+
                     // Build info
-                    Text(buildInfo)
+                    Text("\(BuildInfo.gitSha) · \(BuildInfo.buildDate)")
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Color(white: 0.39))
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -139,10 +211,6 @@ struct SettingsView: View {
         return Color(white: 0.68)
     }
 
-    private var buildInfo: String {
-        let commit = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "dev"
-        return commit
-    }
 }
 
 // MARK: - Input Field

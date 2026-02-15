@@ -40,12 +40,14 @@ struct StatCell: View {
                     .tracking(0.5)
             }
             Text(value)
-                .font(.system(size: 32, weight: .bold).monospacedDigit())
+                .font(.system(size: 28, weight: .bold).monospacedDigit())
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .background(Color(red: 0.17, green: 0.17, blue: 0.18)) // #2C2C2E
     }
 }
