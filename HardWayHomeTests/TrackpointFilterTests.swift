@@ -1,18 +1,20 @@
 import Testing
+import Foundation
 @testable import HardWayHome
 
 @Suite("Trackpoint Filter")
 struct TrackpointFilterTests {
 
-    private func makeTP(lat: Double, lng: Double, err: Double?, createdAt: String) -> Trackpoint {
+    private func makeTP(lat: Double, lng: Double, err: Double?, createdAt: TimeInterval) -> Trackpoint {
         Trackpoint(workoutId: 1, createdAt: createdAt, lat: lat, lng: lng, speed: nil, err: err)
     }
 
     @Test("Filters out nil accuracy")
     func nilAccuracy() {
+        let base = epoch("2026-02-13T11:30:00Z")
         let tps = [
-            makeTP(lat: 51.5, lng: -0.1, err: nil, createdAt: "2026-02-13T11:30:00Z"),
-            makeTP(lat: 51.5, lng: -0.1, err: 10, createdAt: "2026-02-13T11:30:10Z"),
+            makeTP(lat: 51.5, lng: -0.1, err: nil, createdAt: base),
+            makeTP(lat: 51.5, lng: -0.1, err: 10, createdAt: base + 10),
         ]
         let filtered = TrackpointFilter.filterReliable(tps)
         #expect(filtered.count == 1)
@@ -20,10 +22,11 @@ struct TrackpointFilterTests {
 
     @Test("Filters out high accuracy error")
     func highError() {
+        let base = epoch("2026-02-13T11:30:00Z")
         let tps = [
-            makeTP(lat: 51.5, lng: -0.1, err: 25, createdAt: "2026-02-13T11:30:00Z"),
-            makeTP(lat: 51.5, lng: -0.1, err: 5, createdAt: "2026-02-13T11:30:10Z"),
-            makeTP(lat: 51.5, lng: -0.1, err: 19.9, createdAt: "2026-02-13T11:30:20Z"),
+            makeTP(lat: 51.5, lng: -0.1, err: 25, createdAt: base),
+            makeTP(lat: 51.5, lng: -0.1, err: 5, createdAt: base + 10),
+            makeTP(lat: 51.5, lng: -0.1, err: 19.9, createdAt: base + 20),
         ]
         let filtered = TrackpointFilter.filterReliable(tps)
         #expect(filtered.count == 2)
@@ -31,21 +34,21 @@ struct TrackpointFilterTests {
 
     @Test("Filters out speed teleports")
     func speedFilter() {
-        // Two points ~11km apart in 10s = 1100 m/s — way above 14 m/s threshold
+        let base = epoch("2026-02-13T11:30:00Z")
         let tps = [
-            makeTP(lat: 51.5, lng: -0.1, err: 5, createdAt: "2026-02-13T11:30:00Z"),
-            makeTP(lat: 51.6, lng: -0.1, err: 5, createdAt: "2026-02-13T11:30:10Z"),
+            makeTP(lat: 51.5, lng: -0.1, err: 5, createdAt: base),
+            makeTP(lat: 51.6, lng: -0.1, err: 5, createdAt: base + 10),
         ]
         let filtered = TrackpointFilter.filterReliable(tps)
-        #expect(filtered.count == 1)  // second point rejected
+        #expect(filtered.count == 1)
     }
 
     @Test("Keeps normal-speed points")
     func normalSpeed() {
-        // ~10m apart in 10s = 1 m/s — well under threshold
+        let base = epoch("2026-02-13T11:30:00Z")
         let tps = [
-            makeTP(lat: 51.50000, lng: -0.10000, err: 5, createdAt: "2026-02-13T11:30:00Z"),
-            makeTP(lat: 51.50009, lng: -0.10000, err: 5, createdAt: "2026-02-13T11:30:10Z"),
+            makeTP(lat: 51.50000, lng: -0.10000, err: 5, createdAt: base),
+            makeTP(lat: 51.50009, lng: -0.10000, err: 5, createdAt: base + 10),
         ]
         let filtered = TrackpointFilter.filterReliable(tps)
         #expect(filtered.count == 2)

@@ -13,13 +13,16 @@ final class AppDatabase: Sendable {
 
     private var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
+        #if DEBUG
+        migrator.eraseDatabaseOnSchemaChange = true
+        #endif
 
-        migrator.registerMigration("v1") { db in
+        migrator.registerMigration("v2_epochs") { db in
             try db.execute(sql: """
                 CREATE TABLE workouts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
+                    started_at REAL NOT NULL,
+                    finished_at REAL,
                     distance REAL,
                     avg_sec_per_km REAL,
                     avg_bpm REAL
@@ -28,7 +31,7 @@ final class AppDatabase: Sendable {
                 CREATE TABLE trackpoints (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     workout_id INTEGER NOT NULL REFERENCES workouts(id),
-                    created_at TEXT NOT NULL,
+                    created_at REAL NOT NULL,
                     lat REAL NOT NULL,
                     lng REAL NOT NULL,
                     speed REAL,
@@ -38,7 +41,7 @@ final class AppDatabase: Sendable {
                 CREATE TABLE pulses (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     workout_id INTEGER NOT NULL REFERENCES workouts(id),
-                    created_at TEXT NOT NULL,
+                    created_at REAL NOT NULL,
                     bpm INTEGER NOT NULL
                 );
 

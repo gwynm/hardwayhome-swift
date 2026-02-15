@@ -18,14 +18,13 @@ extension AppDatabase {
     /// Create a new workout and return its id.
     func startWorkout() throws -> Int64 {
         try dbWriter.write { db in
-            var workout = Workout(startedAt: ISO8601DateFormatter().string(from: Date()))
+            let workout = Workout(startedAt: Date().timeIntervalSince1970)
             try workout.insert(db)
             return db.lastInsertedRowID
         }
     }
 
     /// Finish a workout: set finished_at and compute cache fields.
-    /// Requires trackpoints and pulses to already be in the database.
     func finishWorkout(_ workoutId: Int64, trackpointFilter: ([Trackpoint]) -> [Trackpoint]) throws {
         try dbWriter.write { db in
             let allTrackpoints = try Trackpoint
@@ -37,17 +36,15 @@ extension AppDatabase {
             let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
 
             var avgSecPerKm: Double? = nil
-            if distance > 0, reliable.count >= 2,
-               let startTime = Formatting.parseISO(reliable.first!.createdAt),
-               let endTime = Formatting.parseISO(reliable.last!.createdAt) {
-                let totalSeconds = endTime.timeIntervalSince(startTime)
+            if distance > 0, reliable.count >= 2 {
+                let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
                 avgSecPerKm = totalSeconds / (distance / 1000)
             }
 
             let avgBpm = try Double.fetchOne(db, sql:
                 "SELECT AVG(bpm) FROM pulses WHERE workout_id = ?", arguments: [workoutId])
 
-            let now = ISO8601DateFormatter().string(from: Date())
+            let now = Date().timeIntervalSince1970
             try db.execute(sql: """
                 UPDATE workouts
                 SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?
@@ -93,18 +90,7 @@ extension AppDatabase {
         try dbWriter.write { db in
             _ = try Trackpoint(
                 workoutId: workoutId,
-                createdAt: ISO8601DateFormatter().string(from: Date()),
-                lat: lat, lng: lng, speed: speed, err: err)
-            .inserted(db)
-        }
-    }
-
-    /// Insert a trackpoint with a specific timestamp (for tests/seeding).
-    func insertTrackpoint(workoutId: Int64, createdAt: String, lat: Double, lng: Double,
-                          speed: Double?, err: Double?) throws {
-        try dbWriter.write { db in
-            _ = try Trackpoint(
-                workoutId: workoutId, createdAt: createdAt,
+                createdAt: Date().timeIntervalSince1970,
                 lat: lat, lng: lng, speed: speed, err: err)
             .inserted(db)
         }
@@ -130,17 +116,9 @@ extension AppDatabase {
         try dbWriter.write { db in
             _ = try Pulse(
                 workoutId: workoutId,
-                createdAt: ISO8601DateFormatter().string(from: Date()),
+                createdAt: Date().timeIntervalSince1970,
                 bpm: bpm)
             .inserted(db)
-        }
-    }
-
-    /// Insert a pulse with a specific timestamp (for tests/seeding).
-    func insertPulse(workoutId: Int64, createdAt: String, bpm: Int) throws {
-        try dbWriter.write { db in
-            _ = try Pulse(workoutId: workoutId, createdAt: createdAt, bpm: bpm)
-                .inserted(db)
         }
     }
 
@@ -157,8 +135,7 @@ extension AppDatabase {
     /// Get average BPM over the last N seconds for a workout.
     func getRecentAvgBpm(_ workoutId: Int64, seconds: Int) throws -> Double? {
         try dbWriter.read { db in
-            let cutoff = ISO8601DateFormatter().string(
-                from: Date().addingTimeInterval(-Double(seconds)))
+            let cutoff = Date().timeIntervalSince1970 - Double(seconds)
             return try Double.fetchOne(db, sql: """
                 SELECT AVG(bpm) FROM pulses
                 WHERE workout_id = ? AND created_at >= ?

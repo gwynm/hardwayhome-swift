@@ -4,7 +4,7 @@ import GRDB
 struct Trackpoint: Codable, FetchableRecord, PersistableRecord, Sendable {
     var id: Int64?
     var workoutId: Int64
-    var createdAt: String
+    var createdAt: TimeInterval
     var lat: Double
     var lng: Double
     var speed: Double?

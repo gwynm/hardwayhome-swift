@@ -32,10 +32,10 @@ struct WorkoutView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)
                             .background(.red)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .clipShape(Rectangle())
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
+                    .padding(.vertical, 16)
 
                     // Live stats grid
                     LiveStatsGrid(

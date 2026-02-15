@@ -29,7 +29,7 @@ struct RouteMapView: View {
                     MapScaleView()
                 }
                 .frame(height: 350)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(Rectangle())
             }
             .padding(.top, 24)
             .padding(.horizontal, 16)

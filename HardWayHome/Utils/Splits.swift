@@ -4,18 +4,12 @@ import Foundation
 enum SplitCalc {
 
     /// Compute per-kilometre splits from trackpoints and pulse data.
-    ///
-    /// Walks through trackpoints accumulating distance. Each time the accumulated
-    /// distance crosses a 1 km boundary, a split is recorded with the elapsed time
-    /// and the average BPM of pulses that fall within that time window.
-    ///
-    /// Only completed kilometres are included — the final partial km is omitted.
     static func computeKmSplits(trackpoints: [Trackpoint], pulses: [Pulse]) -> [KmSplit] {
         guard trackpoints.count >= 2 else { return [] }
 
         var splits: [KmSplit] = []
         var cumulativeDistance = 0.0
-        var splitStartTime = Formatting.parseISO(trackpoints[0].createdAt) ?? Date.distantPast
+        var splitStartEpoch = trackpoints[0].createdAt
         var nextKmBoundary = 1000.0
         var pulseIdx = 0
 
@@ -26,20 +20,18 @@ enum SplitCalc {
             cumulativeDistance += segDist
 
             if cumulativeDistance >= nextKmBoundary {
-                let splitEndTime = Formatting.parseISO(trackpoints[i].createdAt) ?? Date.distantPast
-                let seconds = splitEndTime.timeIntervalSince(splitStartTime)
-
-                let startMs = splitStartTime.timeIntervalSince1970
-                let endMs = splitEndTime.timeIntervalSince1970
+                let splitEndEpoch = trackpoints[i].createdAt
+                let seconds = splitEndEpoch - splitStartEpoch
 
                 let avgBpm = averageBpmInWindow(
                     pulses: pulses, startIdx: pulseIdx,
-                    startSec: startMs, endSec: endMs)
-                pulseIdx = advancePulseIdx(pulses: pulses, currentIdx: pulseIdx, endSec: endMs)
+                    startSec: splitStartEpoch, endSec: splitEndEpoch)
+                pulseIdx = advancePulseIdx(
+                    pulses: pulses, currentIdx: pulseIdx, endSec: splitEndEpoch)
 
                 splits.append(KmSplit(km: splits.count + 1, seconds: seconds, avgBpm: avgBpm))
 
-                splitStartTime = splitEndTime
+                splitStartEpoch = splitEndEpoch
                 nextKmBoundary += 1000
             }
         }
@@ -47,7 +39,6 @@ enum SplitCalc {
         return splits
     }
 
-    /// Average BPM of pulses whose created_at falls within [startSec, endSec] (epoch seconds).
     private static func averageBpmInWindow(
         pulses: [Pulse], startIdx: Int, startSec: Double, endSec: Double
     ) -> Double? {
@@ -55,8 +46,7 @@ enum SplitCalc {
         var count = 0
 
         for i in startIdx..<pulses.count {
-            guard let t = Formatting.parseISO(pulses[i].createdAt) else { continue }
-            let epoch = t.timeIntervalSince1970
+            let epoch = pulses[i].createdAt
             if epoch > endSec { break }
             if epoch >= startSec {
                 sum += Double(pulses[i].bpm)
@@ -67,14 +57,11 @@ enum SplitCalc {
         return count > 0 ? sum / Double(count) : nil
     }
 
-    /// Advance pulse index past all pulses up to endSec.
     private static func advancePulseIdx(
         pulses: [Pulse], currentIdx: Int, endSec: Double
     ) -> Int {
         var idx = currentIdx
-        while idx < pulses.count,
-              let t = Formatting.parseISO(pulses[idx].createdAt),
-              t.timeIntervalSince1970 <= endSec {
+        while idx < pulses.count, pulses[idx].createdAt <= endSec {
             idx += 1
         }
         return idx

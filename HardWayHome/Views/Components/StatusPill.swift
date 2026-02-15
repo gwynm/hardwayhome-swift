@@ -12,7 +12,7 @@ struct StatusPill: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(color)
-            .clipShape(Capsule())
+            .clipShape(Rectangle())
     }
 }
 

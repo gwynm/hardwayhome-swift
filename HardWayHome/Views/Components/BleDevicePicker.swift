@@ -60,7 +60,7 @@ struct BleDevicePicker: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
                     .background(Color(white: 0.17))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(Rectangle())
             }
         }
         .padding(20)

@@ -3,8 +3,6 @@ import GRDB
 import Combine
 
 /// Provides live workout stats via GRDB observation.
-/// Replaces the 1Hz polling approach from the TypeScript version with
-/// reactive database observation — updates whenever trackpoints or pulses change.
 @MainActor
 @Observable
 final class WorkoutStatsVM {
@@ -21,7 +19,7 @@ final class WorkoutStatsVM {
     private var cancellable: AnyCancellable?
     private var timer: Timer?
     private var workoutId: Int64?
-    private var startedAt: Date?
+    private var startedAtEpoch: TimeInterval?
     private let db: AppDatabase
 
     init(db: AppDatabase = .shared) {
@@ -29,9 +27,9 @@ final class WorkoutStatsVM {
     }
 
     /// Start observing stats for a workout.
-    func observe(workoutId: Int64, startedAt: String) {
+    func observe(workoutId: Int64, startedAt: TimeInterval) {
         self.workoutId = workoutId
-        self.startedAt = Formatting.parseISO(startedAt)
+        self.startedAtEpoch = startedAt
         startObservation(workoutId: workoutId)
         startElapsedTimer()
     }
@@ -43,11 +41,10 @@ final class WorkoutStatsVM {
         timer?.invalidate()
         timer = nil
         workoutId = nil
-        startedAt = nil
+        startedAtEpoch = nil
     }
 
     private func startObservation(workoutId: Int64) {
-        // Observe trackpoints + pulses for this workout
         let observation = ValueObservation.tracking { db -> ([Trackpoint], [Pulse]) in
             let trackpoints = try Trackpoint
                 .filter(Trackpoint.Columns.workoutId == workoutId)
@@ -80,8 +77,8 @@ final class WorkoutStatsVM {
     }
 
     private func updateElapsed() {
-        guard let startedAt else { return }
-        elapsedSeconds = max(0, Date().timeIntervalSince(startedAt))
+        guard let startedAtEpoch else { return }
+        elapsedSeconds = max(0, Date().timeIntervalSince1970 - startedAtEpoch)
     }
 
     private func computeStats(allTrackpoints: [Trackpoint], pulses: [Pulse]) {
@@ -93,20 +90,19 @@ final class WorkoutStatsVM {
         splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
 
         // BPM from recent pulses
-        let now = Date()
+        let now = Date().timeIntervalSince1970
         bpm5s = avgBpm(pulses: pulses, lastSeconds: 5, now: now)
         bpm60s = avgBpm(pulses: pulses, lastSeconds: 60, now: now)
 
         updateElapsed()
     }
 
-    private func avgBpm(pulses: [Pulse], lastSeconds: Int, now: Date) -> Double? {
-        let cutoff = now.addingTimeInterval(-Double(lastSeconds))
+    private func avgBpm(pulses: [Pulse], lastSeconds: Int, now: TimeInterval) -> Double? {
+        let cutoff = now - Double(lastSeconds)
         var sum = 0.0
         var count = 0
         for p in pulses.reversed() {
-            guard let t = Formatting.parseISO(p.createdAt) else { continue }
-            if t < cutoff { break }
+            if p.createdAt < cutoff { break }
             sum += Double(p.bpm)
             count += 1
         }

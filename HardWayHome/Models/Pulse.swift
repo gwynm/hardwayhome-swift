@@ -4,7 +4,7 @@ import GRDB
 struct Pulse: Codable, FetchableRecord, PersistableRecord, Sendable {
     var id: Int64?
     var workoutId: Int64
-    var createdAt: String
+    var createdAt: TimeInterval
     var bpm: Int
 
     static let databaseTableName = "pulses"

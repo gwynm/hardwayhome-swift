@@ -12,11 +12,11 @@ struct SplitsTests {
 
     @Test("No splits when distance < 1km")
     func underOneKm() {
-        // Two points ~111m apart
+        let base = epoch("2026-02-13T11:30:00Z")
         let tps = [
-            Trackpoint(workoutId: 1, createdAt: "2026-02-13T11:30:00Z",
+            Trackpoint(workoutId: 1, createdAt: base,
                        lat: 51.500, lng: -0.100, speed: nil, err: 5),
-            Trackpoint(workoutId: 1, createdAt: "2026-02-13T11:30:30Z",
+            Trackpoint(workoutId: 1, createdAt: base + 30,
                        lat: 51.501, lng: -0.100, speed: nil, err: 5),
         ]
         let splits = SplitCalc.computeKmSplits(trackpoints: tps, pulses: [])
@@ -25,40 +25,33 @@ struct SplitsTests {
 
     @Test("One split for >1km route")
     func oneSplit() {
-        // Create 10 points, each ~111m apart = ~1km total
-        // 0.001 degrees lat ≈ 111m
+        let base = epoch("2026-02-13T11:30:00Z")
         var tps: [Trackpoint] = []
         for i in 0..<11 {
             let lat = 51.5000 + Double(i) * 0.001
-            let seconds = i * 30
-            let minute = 30 + seconds / 60
-            let sec = seconds % 60
             tps.append(Trackpoint(
-                workoutId: 1,
-                createdAt: "2026-02-13T11:\(String(format: "%02d", minute)):\(String(format: "%02d", sec))Z",
+                workoutId: 1, createdAt: base + Double(i * 30),
                 lat: lat, lng: -0.100, speed: nil, err: 5))
         }
 
         let splits = SplitCalc.computeKmSplits(trackpoints: tps, pulses: [])
         #expect(splits.count == 1)
         #expect(splits.first?.km == 1)
-        #expect(splits.first?.avgBpm == nil)  // no pulses
+        #expect(splits.first?.avgBpm == nil)
     }
 
     @Test("Splits include average BPM from pulses")
     func splitsWithBpm() {
+        let base = epoch("2026-02-13T11:30:00Z")
         var tps: [Trackpoint] = []
         var pulses: [Pulse] = []
         for i in 0..<11 {
             let lat = 51.5000 + Double(i) * 0.001
-            let seconds = i * 30
-            let minute = 30 + seconds / 60
-            let sec = seconds % 60
-            let ts = "2026-02-13T11:\(String(format: "%02d", minute)):\(String(format: "%02d", sec))Z"
+            let t = base + Double(i * 30)
             tps.append(Trackpoint(
-                workoutId: 1, createdAt: ts,
+                workoutId: 1, createdAt: t,
                 lat: lat, lng: -0.100, speed: nil, err: 5))
-            pulses.append(Pulse(workoutId: 1, createdAt: ts, bpm: 140 + i))
+            pulses.append(Pulse(workoutId: 1, createdAt: t, bpm: 140 + i))
         }
 
         let splits = SplitCalc.computeKmSplits(trackpoints: tps, pulses: pulses)

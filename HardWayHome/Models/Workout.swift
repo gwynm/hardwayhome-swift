@@ -3,8 +3,8 @@ import GRDB
 
 struct Workout: Codable, FetchableRecord, PersistableRecord, Sendable {
     var id: Int64?
-    var startedAt: String
-    var finishedAt: String?
+    var startedAt: TimeInterval
+    var finishedAt: TimeInterval?
     var distance: Double?
     var avgSecPerKm: Double?
     var avgBpm: Double?

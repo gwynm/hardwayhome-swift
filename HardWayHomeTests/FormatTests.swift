@@ -67,25 +67,12 @@ struct FormatTests {
         #expect(Formatting.formatBpm(nil as Double?) == "--")
     }
 
-    // MARK: - ISO parsing
-
-    @Test("parseISO with fractional seconds")
-    func parseISOFractional() {
-        let date = Formatting.parseISO("2026-02-13T11:30:00.000Z")
-        #expect(date != nil)
-    }
-
-    @Test("parseISO without fractional seconds")
-    func parseISONoFrac() {
-        let date = Formatting.parseISO("2026-02-13T11:30:00Z")
-        #expect(date != nil)
-    }
+    // MARK: - Date display
 
     @Test("formatDate current year omits year")
     func formatDateCurrentYear() {
-        let now = Formatting.toISO(Date())
-        let result = Formatting.formatDate(now)
-        // Should not contain year
+        let epoch = Date().timeIntervalSince1970
+        let result = Formatting.formatDate(epoch)
         #expect(!result.contains("202"))
     }
 }

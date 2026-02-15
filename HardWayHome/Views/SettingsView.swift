@@ -68,7 +68,7 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(Rectangle())
                         .disabled(vm.isRunning)
 
                         if vm.hasChanges {
@@ -78,7 +78,7 @@ struct SettingsView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(Color(white: 0.17))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .clipShape(Rectangle())
                         }
                     }
                     .padding(.bottom, 24)
@@ -101,7 +101,7 @@ struct SettingsView: View {
                         }
                         .padding(12)
                         .background(Color(red: 0.11, green: 0.11, blue: 0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(Rectangle())
                         .padding(.bottom, 24)
                         .id("logBottom")
                         .onChange(of: vm.logs.count) {
@@ -132,7 +132,7 @@ struct SettingsView: View {
 
                     Button(action: {
                         vm.generateSeedData()
-                        seedConfirmation = "Added 3 sample workouts"
+                        seedConfirmation = "Added 4 sample workouts"
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             seedConfirmation = nil
                         }
@@ -143,7 +143,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(Color(white: 0.17))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(Rectangle())
                     }
 
                     if let msg = seedConfirmation {
@@ -153,7 +153,7 @@ struct SettingsView: View {
                             .padding(.top, 8)
                     }
 
-                    Text("Replaces all existing workouts with 3 sample runs (5k, 3k, 8k).")
+                    Text("Replaces all existing workouts with 4 sample runs (3k, 5k, 8k, 25k).")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(white: 0.56))
                         .lineSpacing(4)
@@ -167,7 +167,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(Color(white: 0.17))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(Rectangle())
                     }
                     .padding(.top, 16)
                     .alert("Clear All Workout Data?",
@@ -243,7 +243,7 @@ private struct InputField: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(Color(red: 0.17, green: 0.17, blue: 0.18))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(Rectangle())
         }
         .padding(.bottom, 16)
     }
