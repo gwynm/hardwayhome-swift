@@ -50,8 +50,8 @@ struct WorkoutView: View {
                     // Km splits
                     KmSplitsTable(splits: statsVM.splits)
 
-                    // Route map
-                    RouteMapView(trackpoints: statsVM.trackpoints)
+                    // Route map with live position
+                    RouteMapView(trackpoints: statsVM.trackpoints, isLive: true)
                 }
                 .padding(.bottom, 40)
             }
