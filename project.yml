@@ -1,0 +1,65 @@
+name: HardWayHome
+options:
+  bundleIdPrefix: com.gwynmorfey.hardwayhome
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.0.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ZBH4BELMH2
+
+targets:
+  HardWayHome:
+    type: application
+    platform: iOS
+    sources:
+      - HardWayHome
+    dependencies:
+      - package: GRDB
+    settings:
+      base:
+        INFOPLIST_FILE: HardWayHome/Info.plist
+        CODE_SIGN_ENTITLEMENTS: HardWayHome/HardWayHome.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.gwynmorfey.hardwayhome.native
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_STRICT_CONCURRENCY: targeted
+    info:
+      path: HardWayHome/Info.plist
+      properties:
+        CFBundleDisplayName: Hard Way Home
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Hard Way Home tracks your location during workouts to calculate distance and pace."
+        NSLocationWhenInUseUsageDescription: "Hard Way Home tracks your location during workouts to calculate distance and pace."
+        NSBluetoothAlwaysUsageDescription: "Hard Way Home connects to your heart rate monitor during workouts."
+        UIBackgroundModes:
+          - location
+          - bluetooth-central
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+    entitlements:
+      path: HardWayHome/HardWayHome.entitlements
+      properties: {}
+
+  HardWayHomeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - HardWayHomeTests
+    dependencies:
+      - target: HardWayHome
+      - package: GRDB
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gwynmorfey.hardwayhome.native.tests
+        GENERATE_INFOPLIST_FILE: YES

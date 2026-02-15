@@ -1,0 +1,19 @@
+# Xcode
+HardWayHome.xcodeproj/
+build/
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+xcuserdata/
+
+# SPM
+.swiftpm/
+.build/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

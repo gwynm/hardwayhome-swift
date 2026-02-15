@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<gpx version="1.1" creator="HardWayHome TestData">
+  <wpt lat="51.5074" lon="-0.1278"><name>Start</name></wpt>
+  <wpt lat="51.5078" lon="-0.1270"><name>P1</name></wpt>
+  <wpt lat="51.5083" lon="-0.1260"><name>P2</name></wpt>
+  <wpt lat="51.5089" lon="-0.1248"><name>P3</name></wpt>
+  <wpt lat="51.5095" lon="-0.1235"><name>P4</name></wpt>
+  <wpt lat="51.5102" lon="-0.1222"><name>P5</name></wpt>
+  <wpt lat="51.5108" lon="-0.1208"><name>P6</name></wpt>
+  <wpt lat="51.5115" lon="-0.1193"><name>P7</name></wpt>
+  <wpt lat="51.5122" lon="-0.1178"><name>P8</name></wpt>
+  <wpt lat="51.5128" lon="-0.1163"><name>P9</name></wpt>
+  <wpt lat="51.5135" lon="-0.1148"><name>P10</name></wpt>
+  <wpt lat="51.5142" lon="-0.1133"><name>P11</name></wpt>
+  <wpt lat="51.5148" lon="-0.1118"><name>P12</name></wpt>
+  <wpt lat="51.5155" lon="-0.1103"><name>P13</name></wpt>
+  <wpt lat="51.5162" lon="-0.1088"><name>P14</name></wpt>
+  <wpt lat="51.5168" lon="-0.1073"><name>P15</name></wpt>
+  <wpt lat="51.5175" lon="-0.1058"><name>P16</name></wpt>
+  <wpt lat="51.5182" lon="-0.1043"><name>P17</name></wpt>
+  <wpt lat="51.5188" lon="-0.1028"><name>P18</name></wpt>
+  <wpt lat="51.5195" lon="-0.1013"><name>P19</name></wpt>
+  <wpt lat="51.5202" lon="-0.0998"><name>P20</name></wpt>
+</gpx>
