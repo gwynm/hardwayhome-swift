@@ -20,7 +20,7 @@ extension AppDatabase {
             finishedAt: epoch("2026-02-10T08:02:30Z"),
             distance: 5200, avgSecPerKm: 375, avgBpm: 152,
             startLat: 51.5074, startLng: -0.1278,
-            bearingDeg: 45, numPoints: 390, intervalSec: 5,
+            bearingDeg: 45, intervalSec: 5,
             baseBpm: 148)
 
         try insertSampleWorkout(
@@ -28,7 +28,7 @@ extension AppDatabase {
             finishedAt: epoch("2026-02-13T17:35:00Z"),
             distance: 3100, avgSecPerKm: 387, avgBpm: 158,
             startLat: 51.5155, startLng: -0.1410,
-            bearingDeg: 135, numPoints: 240, intervalSec: 5,
+            bearingDeg: 135, intervalSec: 5,
             baseBpm: 155)
 
         try insertSampleWorkout(
@@ -36,7 +36,7 @@ extension AppDatabase {
             finishedAt: epoch("2026-02-14T06:55:00Z"),
             distance: 8400, avgSecPerKm: 393, avgBpm: 155,
             startLat: 51.5010, startLng: -0.1190,
-            bearingDeg: 315, numPoints: 660, intervalSec: 5,
+            bearingDeg: 315, intervalSec: 5,
             baseBpm: 152)
 
         // 25km route — stress test for performance
@@ -45,7 +45,7 @@ extension AppDatabase {
             finishedAt: epoch("2026-02-08T08:00:00Z"),
             distance: 25000, avgSecPerKm: 360, avgBpm: 150,
             startLat: 51.4950, startLng: -0.1000,
-            bearingDeg: 200, numPoints: 5000, intervalSec: 5,
+            bearingDeg: 200, intervalSec: 2,
             baseBpm: 145)
     }
 
@@ -53,7 +53,7 @@ extension AppDatabase {
         startedAt: TimeInterval, finishedAt: TimeInterval,
         distance: Double, avgSecPerKm: Double, avgBpm: Double,
         startLat: Double, startLng: Double,
-        bearingDeg: Double, numPoints: Int, intervalSec: Int,
+        bearingDeg: Double, intervalSec: Int,
         baseBpm: Int
     ) throws {
         let workoutId = try dbWriter.write { db -> Int64 in
@@ -64,14 +64,16 @@ extension AppDatabase {
             return db.lastInsertedRowID
         }
 
+        let totalDuration = finishedAt - startedAt
+        let numPoints = Int(totalDuration / Double(intervalSec))
+        let baseSpeed = distance / totalDuration  // m/s derived from target distance
         let bearing = bearingDeg * .pi / 180
         var lat = startLat
         var lng = startLng
-        let baseSpeed = 3.5
 
         try dbWriter.write { db in
             for i in 0..<numPoints {
-                let speed = baseSpeed + Double.random(in: -0.5...0.5)
+                let speed = baseSpeed + Double.random(in: -0.3...0.3)
                 let err = Double.random(in: 3...12)
                 let t = startedAt + Double(i * intervalSec)
 
@@ -85,7 +87,8 @@ extension AppDatabase {
                 lng += (distM * sin(bearing)) / (111320 * cos(lat * .pi / 180))
             }
 
-            for i in 0..<(numPoints * intervalSec) {
+            let totalPulses = Int(totalDuration)
+            for i in 0..<totalPulses {
                 let bpm = baseBpm + Int.random(in: -10...15)
                 let t = startedAt + Double(i)
 
