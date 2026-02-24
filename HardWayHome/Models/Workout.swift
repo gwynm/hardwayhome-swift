@@ -24,4 +24,8 @@ struct Workout: Codable, FetchableRecord, PersistableRecord, Sendable {
         case avgSecPerKm = "avg_sec_per_km"
         case avgBpm = "avg_bpm"
     }
+
+    var isStationary: Bool {
+        (distance ?? 0) < 100
+    }
 }

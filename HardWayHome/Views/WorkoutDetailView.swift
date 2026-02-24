@@ -26,6 +26,7 @@ struct WorkoutDetailView: View {
         _data = State(initialValue: DetailData(
             workout: workout,
             trackpoints: trackpoints,
+            pulses: pulses,
             distance: distance,
             elapsedSeconds: elapsedSeconds,
             splits: splits))
@@ -57,23 +58,34 @@ struct WorkoutDetailView: View {
 
                     // Summary stats
                     VStack(spacing: 2) {
-                        HStack(spacing: 2) {
-                            StatCell(label: "Distance", value: Formatting.formatDistance(data.distance))
-                            StatCell(label: "Time", value: Formatting.formatDuration(data.elapsedSeconds))
-                        }
-                        HStack(spacing: 2) {
-                            StatCell(label: "Avg Pace", value: Formatting.formatPace(data.workout.avgSecPerKm))
-                            StatCell(label: "Avg BPM", value: Formatting.formatBpm(data.workout.avgBpm))
+                        if data.workout.isStationary {
+                            HStack(spacing: 2) {
+                                StatCell(label: "Time", value: Formatting.formatDuration(data.elapsedSeconds))
+                                StatCell(label: "Avg BPM", value: Formatting.formatBpm(data.workout.avgBpm))
+                            }
+                        } else {
+                            HStack(spacing: 2) {
+                                StatCell(label: "Distance", value: Formatting.formatDistance(data.distance))
+                                StatCell(label: "Time", value: Formatting.formatDuration(data.elapsedSeconds))
+                            }
+                            HStack(spacing: 2) {
+                                StatCell(label: "Avg Pace", value: Formatting.formatPace(data.workout.avgSecPerKm))
+                                StatCell(label: "Avg BPM", value: Formatting.formatBpm(data.workout.avgBpm))
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
-                    // Km splits
-                    KmSplitsTable(splits: data.splits)
-
-                    // Route map
-                    RouteMapView(trackpoints: data.trackpoints)
+                    if data.workout.isStationary {
+                        HeartRateChartView(
+                            pulses: data.pulses,
+                            workoutStartedAt: data.workout.startedAt,
+                            elapsedSeconds: data.elapsedSeconds)
+                    } else {
+                        KmSplitsTable(splits: data.splits)
+                        RouteMapView(trackpoints: data.trackpoints)
+                    }
                 }
                 .padding(.bottom, 40)
             }
@@ -94,6 +106,7 @@ struct WorkoutDetailView: View {
     struct DetailData {
         let workout: Workout
         let trackpoints: [Trackpoint]
+        let pulses: [Pulse]
         let distance: Double
         let elapsedSeconds: Double
         let splits: [KmSplit]

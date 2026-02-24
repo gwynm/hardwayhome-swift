@@ -1,6 +1,6 @@
 # Hard Way Home
 
-A lightweight run tracker for iOS
+A lightweight exercise tracker for iOS
 
 ## Features
 
@@ -45,6 +45,10 @@ Yep, built by robots (with guidance, but without review). Seems to work, but I w
 Plug your phone in, do scripts/deploy.sh 
 
 ## FAQ
+
+### How do I pick an exercise type?
+
+You don't; that would be too many buttons. If the GPS indicates that you moved, the workout will give you km splits and show your distance. If you didn't move, it will show total time and a heart rate graph instead.
 
 ### Why doesn't it have rounded corners and transparency effects?
 

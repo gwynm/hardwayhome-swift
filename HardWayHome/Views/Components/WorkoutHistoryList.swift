@@ -46,15 +46,25 @@ struct WorkoutHistoryList: View {
                                 HStack {
                                     Text(Formatting.formatDate(workout.startedAt))
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                    Text(Formatting.formatDistance(workout.distance))
-                                        .frame(width: 90, alignment: .trailing)
-                                    Text(Formatting.formatPace(workout.avgSecPerKm))
-                                        .frame(width: 70, alignment: .trailing)
+                                    if workout.isStationary {
+                                        Text(Formatting.formatDuration(
+                                            (workout.finishedAt ?? workout.startedAt) - workout.startedAt))
+                                            .frame(width: 90, alignment: .trailing)
+                                        Text("")
+                                            .frame(width: 70, alignment: .trailing)
+                                    } else {
+                                        Text(Formatting.formatDistance(workout.distance))
+                                            .frame(width: 90, alignment: .trailing)
+                                        Text(Formatting.formatPace(workout.avgSecPerKm))
+                                            .frame(width: 70, alignment: .trailing)
+                                    }
                                     Text(Formatting.formatBpm(workout.avgBpm))
                                         .frame(width: 60, alignment: .trailing)
                                 }
                                 .font(.system(size: 15).monospacedDigit())
-                                .foregroundStyle(.white)
+                                .foregroundStyle(workout.isStationary
+                                    ? Color(red: 0.68, green: 0.85, blue: 1.0)
+                                    : .white)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .overlay(alignment: .bottom) {
