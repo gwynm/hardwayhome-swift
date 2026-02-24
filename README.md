@@ -33,6 +33,7 @@ A lightweight exercise tracker for iOS
 <img src="assets/screenshots/home.png" width="200" alt="Home screen" />
 <img src="assets/screenshots/workout.png" width="200" alt="Workout in progress" />
 <img src="assets/screenshots/workout-detail.png" width="200" alt="Workout detail with splits and map" />
+<img src="assets/screenshots/stationary-detail.png" width="200" alt="Stationary workout with heart rate graph" />
 <img src="assets/screenshots/settings.png" width="200" alt="Settings screen" />
 </p>
 

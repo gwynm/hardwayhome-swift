@@ -47,6 +47,11 @@ extension AppDatabase {
             startLat: 51.4950, startLng: -0.1000,
             bearingDeg: 200, intervalSec: 2,
             baseBpm: 145)
+
+        try insertStationaryWorkout(
+            startedAt: epoch("2026-02-15T18:00:00Z"),
+            finishedAt: epoch("2026-02-15T18:42:00Z"),
+            avgBpm: 128, baseBpm: 90)
     }
 
     private func insertSampleWorkout(
@@ -91,6 +96,48 @@ extension AppDatabase {
             for i in 0..<totalPulses {
                 let bpm = baseBpm + Int.random(in: -10...15)
                 let t = startedAt + Double(i)
+
+                try db.execute(sql: """
+                    INSERT INTO pulses (workout_id, created_at, bpm)
+                    VALUES (?, ?, ?)
+                    """, arguments: [workoutId, t, bpm])
+            }
+        }
+    }
+
+    private func insertStationaryWorkout(
+        startedAt: TimeInterval, finishedAt: TimeInterval,
+        avgBpm: Double, baseBpm: Int
+    ) throws {
+        let workoutId = try dbWriter.write { db -> Int64 in
+            try db.execute(sql: """
+                INSERT INTO workouts (started_at, finished_at, distance, avg_sec_per_km, avg_bpm)
+                VALUES (?, ?, 0, NULL, ?)
+                """, arguments: [startedAt, finishedAt, avgBpm])
+            return db.lastInsertedRowID
+        }
+
+        let totalDuration = finishedAt - startedAt
+        let totalPulses = Int(totalDuration)
+
+        try dbWriter.write { db in
+            for i in 0..<totalPulses {
+                let t = startedAt + Double(i)
+                let progress = Double(i) / Double(totalPulses)
+
+                // Simulate warmup -> peak -> cooldown curve
+                let curve: Int
+                if progress < 0.15 {
+                    let ramp = progress / 0.15
+                    curve = baseBpm + Int(Double(baseBpm) * 0.5 * ramp)
+                } else if progress > 0.85 {
+                    let ramp = (1.0 - progress) / 0.15
+                    curve = baseBpm + Int(Double(baseBpm) * 0.5 * ramp)
+                } else {
+                    curve = baseBpm + Int(Double(baseBpm) * 0.5)
+                }
+
+                let bpm = max(40, min(200, curve + Int.random(in: -8...8)))
 
                 try db.execute(sql: """
                     INSERT INTO pulses (workout_id, created_at, bpm)

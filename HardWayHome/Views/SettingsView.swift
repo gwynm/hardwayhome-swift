@@ -153,7 +153,7 @@ struct SettingsView: View {
                             .padding(.top, 8)
                     }
 
-                    Text("Replaces all existing workouts with 4 sample runs (3k, 5k, 8k, 25k).")
+                    Text("Replaces all existing workouts with 4 sample runs (3k, 5k, 8k, 25k) and 1 stationary workout.")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(white: 0.56))
                         .lineSpacing(4)
