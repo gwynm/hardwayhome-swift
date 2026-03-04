@@ -52,6 +52,30 @@ final class SettingsVM {
         isRunning = false
     }
 
+    func restoreFromWebDAV(filename: String) async {
+        save()
+        logs = []
+        isRunning = true
+
+        let success = await backupService.restoreFromWebDAV(
+            url: url.trimmingCharacters(in: .whitespaces),
+            username: username.trimmingCharacters(in: .whitespaces).isEmpty
+                ? nil : username.trimmingCharacters(in: .whitespaces),
+            password: password.isEmpty ? nil : password,
+            filename: filename,
+            onLog: { [weak self] line in
+                self?.logs.append(line)
+            }
+        )
+
+        isRunning = false
+        if success {
+            restoreSucceeded = true
+        }
+    }
+
+    var restoreSucceeded = false
+
     func generateSeedData() {
         try? db.seedSampleData()
     }

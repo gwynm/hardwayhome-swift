@@ -20,3 +20,8 @@ HardWayHome/BuildInfo.swift
 # IDE
 .vscode/
 .idea/
+
+# Scripts
+scripts/.venv/
+scripts/.strava-tokens.json
+*.db

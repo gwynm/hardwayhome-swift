@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import os
 
 private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "backup")
@@ -217,6 +218,111 @@ final class BackupService {
         } catch {
             log.error("WebDAV upload error: \(error)")
             onLog?("ERROR: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    // MARK: - Restore
+
+    func restoreFromWebDAV(url: String, username: String?, password: String?,
+                           filename: String,
+                           onLog: @escaping @MainActor (String) -> Void) async -> Bool {
+        let config = WebDAVConfig(baseURL: url, username: username, password: password)
+        let sourceURL = config.targetURL(filename: filename)
+        onLog("GET \(sourceURL)")
+
+        guard let remoteURL = URL(string: sourceURL) else {
+            onLog("ERROR: Invalid URL")
+            return false
+        }
+
+        var request = URLRequest(url: remoteURL)
+        request.httpMethod = "GET"
+        if let auth = config.authHeader() {
+            request.setValue(auth, forHTTPHeaderField: "Authorization")
+        }
+
+        let tempURL: URL
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            onLog("Response: \(statusCode) (\(data.count) bytes)")
+            guard (200..<300).contains(statusCode) else {
+                onLog("ERROR: HTTP \(statusCode)")
+                return false
+            }
+
+            let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            tempURL = cacheDir.appendingPathComponent("restore-\(UUID().uuidString).sqlite")
+            try data.write(to: tempURL)
+        } catch {
+            onLog("ERROR: \(error.localizedDescription)")
+            return false
+        }
+
+        onLog("Validating database...")
+        guard validateDatabase(at: tempURL, onLog: onLog) else {
+            cleanup(tempURL)
+            return false
+        }
+
+        guard let dbPath = db.databasePath else {
+            onLog("ERROR: Cannot determine database path")
+            cleanup(tempURL)
+            return false
+        }
+        let dbURL = URL(fileURLWithPath: dbPath)
+
+        onLog("Replacing database...")
+        do {
+            let fm = FileManager.default
+            let backupURL = dbURL.deletingLastPathComponent()
+                .appendingPathComponent("hardwayhome-pre-restore.db")
+            try? fm.removeItem(at: backupURL)
+            try fm.copyItem(at: dbURL, to: backupURL)
+            onLog("Pre-restore backup saved")
+
+            try? fm.removeItem(at: URL(fileURLWithPath: dbPath + "-wal"))
+            try? fm.removeItem(at: URL(fileURLWithPath: dbPath + "-shm"))
+            try fm.removeItem(at: dbURL)
+            try fm.moveItem(at: tempURL, to: dbURL)
+            onLog("Database replaced. Restart the app to use the new data.")
+            return true
+        } catch {
+            onLog("ERROR: \(error.localizedDescription)")
+            cleanup(tempURL)
+            return false
+        }
+    }
+
+    private func validateDatabase(at url: URL, onLog: (String) -> Void) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            onLog("ERROR: Downloaded file does not exist")
+            return false
+        }
+        guard let fileSize = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
+              fileSize > 1024 else {
+            onLog("ERROR: File too small to be a valid database")
+            return false
+        }
+
+        do {
+            let testDb = try DatabaseQueue(path: url.path)
+            let tables: [String] = try testDb.read { db in
+                let rows = try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type='table'")
+                return rows.map { $0["name"] as String }
+            }
+            let required = ["workouts", "trackpoints", "pulses"]
+            for table in required {
+                guard tables.contains(table) else {
+                    onLog("ERROR: Missing table '\(table)'")
+                    return false
+                }
+            }
+            onLog("Validation OK (tables: \(tables.joined(separator: ", ")))")
+            return true
+        } catch {
+            onLog("ERROR: Not a valid SQLite database: \(error.localizedDescription)")
             return false
         }
     }

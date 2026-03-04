@@ -5,7 +5,7 @@ enum Formatting {
 
     // MARK: - Epoch / display
 
-    /// Format an epoch timestamp as a short date with time: "13 Feb 14:02".
+    /// Format an epoch timestamp as a short date with time: "13 Feb 26 14:02".
     static func formatDate(_ epoch: TimeInterval) -> String {
         let date = Date(timeIntervalSince1970: epoch)
         let cal = Calendar.current
@@ -13,13 +13,10 @@ enum Formatting {
                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         let day = cal.component(.day, from: date)
         let month = months[cal.component(.month, from: date) - 1]
+        let year = cal.component(.year, from: date) % 100
         let hours = String(format: "%02d", cal.component(.hour, from: date))
         let minutes = String(format: "%02d", cal.component(.minute, from: date))
-
-        if cal.component(.year, from: date) == cal.component(.year, from: Date()) {
-            return "\(day) \(month) \(hours):\(minutes)"
-        }
-        return "\(day) \(month) \(cal.component(.year, from: date)) \(hours):\(minutes)"
+        return "\(day) \(month) \(String(format: "%02d", year)) \(hours):\(minutes)"
     }
 
     // MARK: - Display formatting

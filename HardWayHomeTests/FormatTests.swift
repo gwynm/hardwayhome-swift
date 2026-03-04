@@ -69,10 +69,12 @@ struct FormatTests {
 
     // MARK: - Date display
 
-    @Test("formatDate current year omits year")
-    func formatDateCurrentYear() {
+    @Test("formatDate always includes two-digit year")
+    func formatDateAlwaysIncludesYear() {
         let epoch = Date().timeIntervalSince1970
         let result = Formatting.formatDate(epoch)
-        #expect(!result.contains("202"))
+        let cal = Calendar.current
+        let yy = String(format: "%02d", cal.component(.year, from: Date()) % 100)
+        #expect(result.contains(yy))
     }
 }

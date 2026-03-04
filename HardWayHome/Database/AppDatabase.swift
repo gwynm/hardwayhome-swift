@@ -55,6 +55,12 @@ final class AppDatabase: Sendable {
                 """)
         }
 
+        migrator.registerMigration("v4") { db in
+            try db.alter(table: "workouts") { t in
+                t.add(column: "strava_id", .integer)
+            }
+        }
+
         return migrator
     }
 

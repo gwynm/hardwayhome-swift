@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var seedConfirmation: String? = nil
     @State private var showClearConfirm = false
     @State private var clearConfirmation: String? = nil
+    @State private var showRestoreConfirm = false
+    @State private var restoreFilename = "merged.db"
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -108,6 +110,44 @@ struct SettingsView: View {
                             withAnimation {
                                 scrollProxy.scrollTo("logBottom", anchor: .bottom)
                             }
+                        }
+                    }
+
+                    // Restore from backup
+                    if !vm.url.trimmingCharacters(in: .whitespaces).isEmpty {
+                        InputField(label: "Restore filename", text: $restoreFilename,
+                                   placeholder: "merged.db")
+
+                        Button(action: { showRestoreConfirm = true }) {
+                            if vm.isRunning {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Restore from Backup")
+                            }
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.orange)
+                        .clipShape(Rectangle())
+                        .disabled(vm.isRunning)
+                        .alert("Restore Database?",
+                               isPresented: $showRestoreConfirm) {
+                            Button("Restore", role: .destructive) {
+                                Task { await vm.restoreFromWebDAV(filename: restoreFilename) }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("This will download '\(restoreFilename)' from WebDAV and replace all local data. A pre-restore backup will be saved.")
+                        }
+                        .padding(.bottom, 8)
+
+                        if vm.restoreSucceeded {
+                            Text("Database replaced. Restart the app to load the new data.")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.green)
+                                .padding(.bottom, 8)
                         }
                     }
 

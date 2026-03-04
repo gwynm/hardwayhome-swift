@@ -23,11 +23,11 @@ struct WorkoutHistoryList: View {
                     Text("DATE")
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("DISTANCE")
-                        .frame(width: 90, alignment: .trailing)
+                        .frame(width: 80, alignment: .trailing)
                     Text("AV PACE")
-                        .frame(width: 70, alignment: .trailing)
+                        .frame(width: 62, alignment: .trailing)
                     Text("AV BPM")
-                        .frame(width: 60, alignment: .trailing)
+                        .frame(width: 52, alignment: .trailing)
                 }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color(white: 0.56))
@@ -49,17 +49,17 @@ struct WorkoutHistoryList: View {
                                     if workout.isStationary {
                                         Text(Formatting.formatDuration(
                                             (workout.finishedAt ?? workout.startedAt) - workout.startedAt))
-                                            .frame(width: 90, alignment: .trailing)
+                                            .frame(width: 80, alignment: .trailing)
                                         Text("")
-                                            .frame(width: 70, alignment: .trailing)
+                                            .frame(width: 62, alignment: .trailing)
                                     } else {
                                         Text(Formatting.formatDistance(workout.distance))
-                                            .frame(width: 90, alignment: .trailing)
+                                            .frame(width: 80, alignment: .trailing)
                                         Text(Formatting.formatPace(workout.avgSecPerKm))
-                                            .frame(width: 70, alignment: .trailing)
+                                            .frame(width: 62, alignment: .trailing)
                                     }
                                     Text(Formatting.formatBpm(workout.avgBpm))
-                                        .frame(width: 60, alignment: .trailing)
+                                        .frame(width: 52, alignment: .trailing)
                                 }
                                 .font(.system(size: 15).monospacedDigit())
                                 .foregroundStyle(workout.isStationary
