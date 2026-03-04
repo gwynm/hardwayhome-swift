@@ -4,6 +4,7 @@ enum AppScreen: Equatable {
     case home
     case workout
     case workoutDetail(Int64)
+    case stats
     case settings
 }
 
@@ -47,11 +48,16 @@ struct HardWayHomeApp: App {
             HomeView(
                 vm: vm,
                 onSelectWorkout: { id in screen = .workoutDetail(id) },
+                onOpenStats: { screen = .stats },
                 onOpenSettings: { screen = .settings })
         case .workout:
             WorkoutView(vm: vm)
         case .workoutDetail(let id):
             WorkoutDetailView(workoutId: id, onBack: { screen = .home })
+        case .stats:
+            YearlyStatsView(
+                vm: YearlyStatsVM(),
+                onBack: { screen = .home })
         case .settings:
             SettingsView(
                 vm: SettingsVM(backupService: vm.backupService),

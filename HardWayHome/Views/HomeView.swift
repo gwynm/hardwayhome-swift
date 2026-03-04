@@ -5,6 +5,7 @@ struct HomeView: View {
     @State private var showBlePicker = false
     @State private var workouts: [Workout] = []
     let onSelectWorkout: (Int64) -> Void
+    let onOpenStats: () -> Void
     let onOpenSettings: () -> Void
 
     var body: some View {
@@ -19,6 +20,11 @@ struct HomeView: View {
                 BackupStatusPill(status: vm.backupService.status,
                                  onTap: onOpenSettings)
                 Spacer()
+                Button(action: onOpenStats) {
+                    Image(systemName: "chart.bar")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color(white: 0.56))
+                }
                 Button(action: onOpenSettings) {
                     Text("⚙")
                         .font(.system(size: 22))
