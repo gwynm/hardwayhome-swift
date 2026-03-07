@@ -349,6 +349,7 @@ CREATE TABLE IF NOT EXISTS grdb_migrations (
 );
 INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES ('v3');
 INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES ('v4');
+INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES ('v5_fix_null_finished_at');
 """
 
 
@@ -382,8 +383,8 @@ def iso_to_epoch(iso_str):
 
 def import_activity(conn, detail, streams, strava_id):
     start_epoch = iso_to_epoch(detail["start_date"])
-    elapsed = detail.get("elapsed_time", 0)
-    finish_epoch = start_epoch + elapsed if elapsed else None
+    elapsed = detail.get("elapsed_time") or detail.get("moving_time") or 0
+    finish_epoch = start_epoch + elapsed
     distance = detail.get("distance")
     avg_speed = detail.get("average_speed")
     avg_sec_per_km = (1000.0 / avg_speed) if avg_speed and avg_speed > 0 else None

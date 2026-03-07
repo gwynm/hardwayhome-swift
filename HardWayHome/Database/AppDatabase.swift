@@ -61,6 +61,13 @@ final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v5_fix_null_finished_at") { db in
+            try db.execute(sql: """
+                UPDATE workouts SET finished_at = started_at
+                WHERE finished_at IS NULL AND strava_id IS NOT NULL
+                """)
+        }
+
         return migrator
     }
 
