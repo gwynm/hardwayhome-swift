@@ -1,30 +1,37 @@
+import AudioToolbox
 import AVFoundation
 import os
 
 private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "sound")
 
-/// Plays bundled audio cues (e.g. km-split beep) with background-safe audio session.
+/// Plays bundled audio cues (e.g. km-split beep).
+/// Uses AudioToolbox system sound for reliable background playback + vibration.
 @MainActor
 final class SoundService {
 
     static let shared = SoundService()
 
-    private var player: AVAudioPlayer?
+    private var soundID: SystemSoundID = 0
 
     private init() {
         configureSession()
+        registerBeep()
     }
 
     func playBeep() {
+        guard soundID != 0 else { return }
+        AudioServicesPlaySystemSound(soundID)
+    }
+
+    private func registerBeep() {
         guard let url = Bundle.main.url(forResource: "beep", withExtension: "wav") else {
             log.warning("beep.wav not found in bundle")
             return
         }
-        do {
-            player = try AVAudioPlayer(contentsOf: url)
-            player?.play()
-        } catch {
-            log.error("Failed to play beep: \(error)")
+        let status = AudioServicesCreateSystemSoundID(url as CFURL, &soundID)
+        if status != kAudioServicesNoError {
+            log.error("Failed to register beep sound: \(status)")
+            soundID = 0
         }
     }
 

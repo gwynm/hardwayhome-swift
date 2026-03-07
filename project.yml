@@ -50,6 +50,7 @@ targets:
         UIBackgroundModes:
           - location
           - bluetooth-central
+          - audio
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
     entitlements:
