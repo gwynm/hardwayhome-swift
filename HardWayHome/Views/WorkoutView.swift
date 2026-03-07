@@ -87,10 +87,13 @@ struct WorkoutView: View {
                     connectionState: vm.heartRateService.connectionState,
                     devices: vm.heartRateService.discoveredDevices,
                     lastDevice: vm.heartRateService.lastDevice,
+                    bleStateLabel: vm.heartRateService.bleState.label,
+                    debugLog: vm.heartRateService.debugLog,
                     onScan: { vm.heartRateService.startScan() },
                     onStopScan: { vm.heartRateService.stopScan() },
                     onConnect: { vm.heartRateService.connect(to: $0) },
                     onDisconnect: { vm.heartRateService.disconnect() },
+                    onReset: { vm.heartRateService.forgetDevice() },
                     onClose: { showBlePicker = false })
             }
         } else {

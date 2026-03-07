@@ -5,10 +5,13 @@ struct BleDevicePicker: View {
     let connectionState: HrConnectionState
     let devices: [HrDevice]
     let lastDevice: HrDevice?
+    let bleStateLabel: String
+    let debugLog: [String]
     let onScan: () -> Void
     let onStopScan: () -> Void
     let onConnect: (String) -> Void
     let onDisconnect: () -> Void
+    let onReset: () -> Void
     let onClose: () -> Void
 
     var body: some View {
@@ -70,11 +73,12 @@ struct BleDevicePicker: View {
         VStack(spacing: 12) {
             ProgressView()
                 .tint(.white)
-            Text("Connecting...")
+            Text("Connecting to \(lastDevice?.name ?? "device")…")
                 .font(.system(size: 15))
                 .foregroundStyle(Color(white: 0.56))
+            debugSection
         }
-        .padding(40)
+        .padding(20)
     }
 
     private var scanView: some View {
@@ -122,6 +126,58 @@ struct BleDevicePicker: View {
                 .listRowBackground(Color(red: 0.11, green: 0.11, blue: 0.12))
             }
             .listStyle(.plain)
+
+            debugSection
         }
+    }
+
+    private var debugSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider().background(Color(white: 0.25))
+
+            HStack {
+                Text("DEBUG")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.4))
+                Spacer()
+                Text("BLE: \(bleStateLabel)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(bleStateLabel == "poweredOn" ? .green : .orange)
+            }
+
+            if let dev = lastDevice {
+                Text("Saved: \(dev.name ?? "unnamed") (\(dev.id.prefix(8))…)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.5))
+            } else {
+                Text("No saved device")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.5))
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(debugLog.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.45))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 120)
+
+            Button(action: onReset) {
+                Text("Reset HR Monitor Settings")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color(white: 0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 }

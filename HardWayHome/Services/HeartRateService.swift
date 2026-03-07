@@ -4,6 +4,20 @@ import os
 
 private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "heartrate")
 
+extension CBManagerState {
+    var label: String {
+        switch self {
+        case .unknown: "unknown"
+        case .resetting: "resetting"
+        case .unsupported: "unsupported"
+        case .unauthorized: "unauthorized"
+        case .poweredOff: "poweredOff"
+        case .poweredOn: "poweredOn"
+        @unknown default: "other(\(rawValue))"
+        }
+    }
+}
+
 /// BLE connection state.
 enum HrConnectionState: Sendable {
     case disconnected
@@ -30,6 +44,8 @@ final class HeartRateService: NSObject {
     private(set) var connectionState: HrConnectionState = .disconnected
     private(set) var currentBpm: Int? = nil
     private(set) var discoveredDevices: [HrDevice] = []
+    private(set) var bleState: CBManagerState = .unknown
+    private(set) var debugLog: [String] = []
 
     /// Called on the main actor after a pulse is successfully inserted.
     var onPulseInserted: ((Pulse) -> Void)?
@@ -70,6 +86,7 @@ final class HeartRateService: NSObject {
     func startScan() {
         discoveredDevices = []
         connectionState = .scanning
+        appendDebug("Starting scan (BLE state: \(bleState.label))")
         centralManager?.scanForPeripherals(
             withServices: [hrServiceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
@@ -86,8 +103,10 @@ final class HeartRateService: NSObject {
         stopScan()
         guard let uuid = UUID(uuidString: deviceId),
               let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first else {
+            appendDebug("Connect failed: can't retrieve peripheral \(deviceId.prefix(8))…")
             return
         }
+        appendDebug("Connecting to \(peripheral.name ?? "?") (\(deviceId.prefix(8))…)")
         connectionState = .connecting
         connectedPeripheral = peripheral
         peripheral.delegate = self
@@ -106,9 +125,17 @@ final class HeartRateService: NSObject {
 
     func reconnectToLastDevice() {
         guard let idString = try? db.kvGet(Self.kvLastDeviceID),
-              let uuid = UUID(uuidString: idString) else { return }
+              let uuid = UUID(uuidString: idString) else {
+            appendDebug("No saved device to reconnect to")
+            return
+        }
         lastDeviceUUID = uuid
-        guard let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first else { return }
+        let name = try? db.kvGet(Self.kvLastDeviceName)
+        appendDebug("Reconnecting to \(name ?? "?") (\(idString.prefix(8))…)")
+        guard let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first else {
+            appendDebug("Peripheral not retrievable from system")
+            return
+        }
         connectionState = .connecting
         connectedPeripheral = peripheral
         peripheral.delegate = self
@@ -124,6 +151,30 @@ final class HeartRateService: NSObject {
     var setActiveWorkoutId: Int64? {
         get { activeWorkoutId }
         set { activeWorkoutId = newValue }
+    }
+
+    /// Forget saved device, disconnect, and reset all BLE state.
+    func forgetDevice() {
+        appendDebug("Reset: forgetting saved device, disconnecting")
+        cancelReconnect()
+        if let peripheral = connectedPeripheral {
+            centralManager?.cancelPeripheralConnection(peripheral)
+        }
+        connectedPeripheral = nil
+        currentBpm = nil
+        lastDeviceUUID = nil
+        discoveredDevices = []
+        connectionState = .disconnected
+        try? db.kvDelete(Self.kvLastDeviceID)
+        try? db.kvDelete(Self.kvLastDeviceName)
+        appendDebug("Reset complete")
+    }
+
+    private func appendDebug(_ message: String) {
+        let ts = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        debugLog.append("[\(ts)] \(message)")
+        if debugLog.count > 50 { debugLog.removeFirst() }
+        log.debug("\(message)")
     }
 
     // MARK: - Reconnection
@@ -178,8 +229,9 @@ extension HeartRateService: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let state = central.state
         Task { @MainActor in
+            self.bleState = state
+            self.appendDebug("BLE state → \(state.label)")
             if state == .poweredOn {
-                // Auto-reconnect to last known HR monitor when BLE becomes ready
                 self.reconnectToLastDevice()
             }
         }
@@ -196,6 +248,7 @@ extension HeartRateService: CBCentralManagerDelegate {
             let device = HrDevice(id: deviceId, name: deviceName)
             if !discoveredDevices.contains(where: { $0.id == device.id }) {
                 discoveredDevices.append(device)
+                appendDebug("Discovered: \(deviceName ?? "unnamed") (\(deviceId.prefix(8))…) RSSI=\(RSSI)")
             }
         }
     }
@@ -207,6 +260,7 @@ extension HeartRateService: CBCentralManagerDelegate {
             cancelReconnect()
             try? db.kvSet(Self.kvLastDeviceID, value: peripheral.identifier.uuidString)
             try? db.kvSet(Self.kvLastDeviceName, value: peripheral.name ?? "HR Monitor")
+            appendDebug("Connected to \(peripheral.name ?? "?"), discovering services…")
             peripheral.discoverServices([hrServiceUUID])
         }
     }
@@ -215,10 +269,13 @@ extension HeartRateService: CBCentralManagerDelegate {
                                     didDisconnectPeripheral peripheral: CBPeripheral,
                                     error: Error?) {
         MainActor.assumeIsolated {
+            let reason = error?.localizedDescription ?? "clean disconnect"
+            appendDebug("Disconnected from \(peripheral.name ?? "?"): \(reason)")
             connectedPeripheral = nil
             currentBpm = nil
             connectionState = .disconnected
             if activeWorkoutId != nil {
+                appendDebug("Workout active, scheduling reconnect")
                 scheduleReconnect(for: peripheral)
             }
         }
@@ -228,6 +285,7 @@ extension HeartRateService: CBCentralManagerDelegate {
                                     didFailToConnect peripheral: CBPeripheral,
                                     error: Error?) {
         MainActor.assumeIsolated {
+            appendDebug("Failed to connect: \(error?.localizedDescription ?? "unknown")")
             connectionState = .disconnected
         }
     }
@@ -257,6 +315,12 @@ extension HeartRateService: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral,
                                 didDiscoverServices error: Error?) {
         MainActor.assumeIsolated {
+            if let error {
+                appendDebug("Service discovery error: \(error.localizedDescription)")
+                return
+            }
+            let uuids = peripheral.services?.map(\.uuid.uuidString) ?? []
+            appendDebug("Discovered services: \(uuids.joined(separator: ", "))")
             guard let services = peripheral.services else { return }
             for service in services where service.uuid == hrServiceUUID {
                 peripheral.discoverCharacteristics([hrMeasurementCharUUID], for: service)
@@ -268,8 +332,15 @@ extension HeartRateService: CBPeripheralDelegate {
                                 didDiscoverCharacteristicsFor service: CBService,
                                 error: Error?) {
         MainActor.assumeIsolated {
+            if let error {
+                appendDebug("Characteristic discovery error: \(error.localizedDescription)")
+                return
+            }
+            let uuids = service.characteristics?.map(\.uuid.uuidString) ?? []
+            appendDebug("Discovered characteristics: \(uuids.joined(separator: ", "))")
             guard let chars = service.characteristics else { return }
             for char in chars where char.uuid == hrMeasurementCharUUID {
+                appendDebug("Subscribing to HR measurement notifications")
                 peripheral.setNotifyValue(true, for: char)
             }
         }
