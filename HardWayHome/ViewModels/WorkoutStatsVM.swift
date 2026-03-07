@@ -89,8 +89,13 @@ final class WorkoutStatsVM {
         pace100m = PaceCalc.paceOverWindow(trackpoints, windowMetres: 100)
         pace1000m = PaceCalc.paceOverWindow(trackpoints, windowMetres: 1000)
 
+        let prevCount = splitState.splits.count
         splitState.advance(newTrackpoint: tp, pulses: allPulses)
         splits = splitState.splits
+
+        if splits.count > prevCount {
+            SoundService.shared.playBeep()
+        }
 
         updateElapsed()
     }
