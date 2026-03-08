@@ -57,6 +57,7 @@ final class HeartRateService: NSObject {
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 30
     private var lastDeviceUUID: UUID?
+    private var autoConnectTask: Task<Void, Never>?
     private let db: AppDatabase
 
     // Standard Bluetooth Heart Rate Service UUIDs
@@ -84,6 +85,7 @@ final class HeartRateService: NSObject {
     }
 
     func startScan() {
+        cancelAutoConnect()
         discoveredDevices = []
         connectionState = .scanning
         appendDebug("Starting scan (BLE state: \(bleState.label))")
@@ -100,6 +102,7 @@ final class HeartRateService: NSObject {
     }
 
     func connect(to deviceId: String) {
+        cancelAutoConnect()
         stopScan()
         guard let uuid = UUID(uuidString: deviceId),
               let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first else {
@@ -114,6 +117,7 @@ final class HeartRateService: NSObject {
     }
 
     func disconnect() {
+        cancelAutoConnect()
         cancelReconnect()
         if let peripheral = connectedPeripheral {
             centralManager?.cancelPeripheralConnection(peripheral)
@@ -121,25 +125,6 @@ final class HeartRateService: NSObject {
         connectedPeripheral = nil
         currentBpm = nil
         connectionState = .disconnected
-    }
-
-    func reconnectToLastDevice() {
-        guard let idString = try? db.kvGet(Self.kvLastDeviceID),
-              let uuid = UUID(uuidString: idString) else {
-            appendDebug("No saved device to reconnect to")
-            return
-        }
-        lastDeviceUUID = uuid
-        let name = try? db.kvGet(Self.kvLastDeviceName)
-        appendDebug("Reconnecting to \(name ?? "?") (\(idString.prefix(8))…)")
-        guard let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first else {
-            appendDebug("Peripheral not retrievable from system")
-            return
-        }
-        connectionState = .connecting
-        connectedPeripheral = peripheral
-        peripheral.delegate = self
-        centralManager?.connect(peripheral, options: nil)
     }
 
     var lastDevice: HrDevice? {
@@ -156,6 +141,7 @@ final class HeartRateService: NSObject {
     /// Forget saved device, disconnect, and reset all BLE state.
     func forgetDevice() {
         appendDebug("Reset: forgetting saved device, disconnecting")
+        cancelAutoConnect()
         cancelReconnect()
         if let peripheral = connectedPeripheral {
             centralManager?.cancelPeripheralConnection(peripheral)
@@ -177,7 +163,103 @@ final class HeartRateService: NSObject {
         log.debug("\(message)")
     }
 
-    // MARK: - Reconnection
+    // MARK: - Auto-connect
+
+    /// Orchestrates startup connection: try saved device (5s) → scan (5s) → auto-connect sole device (5s).
+    private func autoConnect() async {
+        // Step 1: try saved device
+        if let idString = try? db.kvGet(Self.kvLastDeviceID),
+           let uuid = UUID(uuidString: idString) {
+            lastDeviceUUID = uuid
+            let name = try? db.kvGet(Self.kvLastDeviceName)
+            appendDebug("Auto-connect: trying saved device \(name ?? "?") (\(idString.prefix(8))…)")
+
+            if let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first {
+                connectionState = .connecting
+                connectedPeripheral = peripheral
+                peripheral.delegate = self
+                centralManager?.connect(peripheral, options: nil)
+
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+
+                if connectionState == .connected {
+                    appendDebug("Auto-connect: saved device connected")
+                    return
+                }
+
+                appendDebug("Auto-connect: saved device timed out after 5s")
+                centralManager?.cancelPeripheralConnection(peripheral)
+                connectedPeripheral = nil
+                connectionState = .disconnected
+            } else {
+                appendDebug("Auto-connect: saved peripheral not retrievable from system")
+            }
+        } else {
+            appendDebug("Auto-connect: no saved device")
+        }
+
+        guard !Task.isCancelled else { return }
+
+        // Step 2: scan for 5 seconds
+        appendDebug("Auto-connect: scanning for 5s…")
+        discoveredDevices = []
+        connectionState = .scanning
+        centralManager?.scanForPeripherals(
+            withServices: [hrServiceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+
+        try? await Task.sleep(for: .seconds(5))
+        guard !Task.isCancelled else { return }
+
+        centralManager?.stopScan()
+        let found = discoveredDevices
+        appendDebug("Auto-connect: scan complete, found \(found.count) device(s)")
+
+        guard found.count == 1, let device = found.first else {
+            connectionState = .disconnected
+            if found.isEmpty {
+                appendDebug("Auto-connect: no devices found, giving up")
+            } else {
+                appendDebug("Auto-connect: \(found.count) devices found, user must choose manually")
+            }
+            return
+        }
+
+        // Step 3: exactly one device found — try connecting
+        guard let uuid = UUID(uuidString: device.id),
+              let peripheral = centralManager?.retrievePeripherals(withIdentifiers: [uuid]).first else {
+            appendDebug("Auto-connect: can't retrieve discovered peripheral")
+            connectionState = .disconnected
+            return
+        }
+
+        appendDebug("Auto-connect: trying sole device \(device.name ?? "?") (\(device.id.prefix(8))…)")
+        connectionState = .connecting
+        connectedPeripheral = peripheral
+        peripheral.delegate = self
+        centralManager?.connect(peripheral, options: nil)
+
+        try? await Task.sleep(for: .seconds(5))
+        guard !Task.isCancelled else { return }
+
+        if connectionState == .connected {
+            appendDebug("Auto-connect: discovered device connected")
+            return
+        }
+
+        appendDebug("Auto-connect: discovered device timed out after 5s, giving up")
+        centralManager?.cancelPeripheralConnection(peripheral)
+        connectedPeripheral = nil
+        connectionState = .disconnected
+    }
+
+    private func cancelAutoConnect() {
+        autoConnectTask?.cancel()
+        autoConnectTask = nil
+    }
+
+    // MARK: - Reconnection (mid-workout)
 
     private func scheduleReconnect(for peripheral: CBPeripheral) {
         cancelReconnect()
@@ -232,7 +314,8 @@ extension HeartRateService: CBCentralManagerDelegate {
             self.bleState = state
             self.appendDebug("BLE state → \(state.label)")
             if state == .poweredOn {
-                self.reconnectToLastDevice()
+                self.cancelAutoConnect()
+                self.autoConnectTask = Task { await self.autoConnect() }
             }
         }
     }
