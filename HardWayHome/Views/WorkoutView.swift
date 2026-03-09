@@ -8,7 +8,16 @@ struct WorkoutView: View {
     @State private var showDiscardAlert = false
 
     var body: some View {
-        if let workout = vm.activeWorkout {
+        if vm.isSaving {
+            VStack(spacing: 16) {
+                ProgressView()
+                    .tint(.white)
+                Text("Saving workout…")
+                    .font(.system(size: 17))
+                    .foregroundStyle(Color(white: 0.56))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let workout = vm.activeWorkout {
             ScrollView {
                 VStack(spacing: 0) {
                     // Status indicators

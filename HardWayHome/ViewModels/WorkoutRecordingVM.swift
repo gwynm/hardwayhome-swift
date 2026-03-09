@@ -9,6 +9,7 @@ private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", categor
 final class WorkoutRecordingVM {
     private(set) var activeWorkout: Workout? = nil
     private(set) var isLoading = true
+    private(set) var isSaving = false
 
     private let db: AppDatabase
     let locationService: LocationService
@@ -60,13 +61,21 @@ final class WorkoutRecordingVM {
         guard let workout = activeWorkout, let id = workout.id else { return }
         locationService.stopTracking()
         heartRateService.setActiveWorkoutId = nil
-        do {
-            try db.finishWorkout(id, trackpointFilter: TrackpointFilter.filterReliable)
-        } catch {
-            log.error("Failed to finish workout \(id): \(error)")
+        isSaving = true
+        let db = self.db
+        let backupService = self.backupService
+        Task {
+            do {
+                try await Task.detached {
+                    try db.finishWorkout(id, trackpointFilter: TrackpointFilter.filterReliable)
+                }.value
+            } catch {
+                log.error("Failed to finish workout \(id): \(error)")
+            }
+            isSaving = false
+            activeWorkout = nil
+            Task.detached { await backupService.backupDatabase() }
         }
-        activeWorkout = nil
-        Task { await backupService.backupDatabase() }
     }
 
     func workoutHistory() throws -> [Workout] {
