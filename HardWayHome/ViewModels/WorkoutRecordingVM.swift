@@ -44,6 +44,11 @@ final class WorkoutRecordingVM {
         }
 
         isLoading = false
+
+        let db = self.db
+        Task.detached {
+            try? db.backfillBestSplitSec(trackpointFilter: TrackpointFilter.filterReliable)
+        }
     }
 
     func start() {

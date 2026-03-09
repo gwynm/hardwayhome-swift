@@ -68,6 +68,12 @@ final class AppDatabase: Sendable {
                 """)
         }
 
+        migrator.registerMigration("v6_best_split") { db in
+            try db.alter(table: "workouts") { t in
+                t.add(column: "best_split_sec", .real)
+            }
+        }
+
         return migrator
     }
 

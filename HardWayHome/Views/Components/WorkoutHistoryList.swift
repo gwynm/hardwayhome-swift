@@ -62,9 +62,7 @@ struct WorkoutHistoryList: View {
                                         .frame(width: 52, alignment: .trailing)
                                 }
                                 .font(.system(size: 15).monospacedDigit())
-                                .foregroundStyle(workout.isStationary
-                                    ? Color(red: 0.68, green: 0.85, blue: 1.0)
-                                    : .white)
+                                .foregroundStyle(rowColor(for: workout))
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
                                 .overlay(alignment: .bottom) {
@@ -76,5 +74,15 @@ struct WorkoutHistoryList: View {
                 }
             }
         }
+    }
+
+    private func rowColor(for workout: Workout) -> Color {
+        if workout.isStationary {
+            return Color(red: 0.68, green: 0.85, blue: 1.0)
+        }
+        if let best = workout.bestSplitSec, best < 480 {
+            return Color(red: 1.0, green: 0.85, blue: 0.3)
+        }
+        return .white
     }
 }

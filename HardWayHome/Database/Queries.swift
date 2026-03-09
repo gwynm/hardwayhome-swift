@@ -30,6 +30,7 @@ extension AppDatabase {
     func finishWorkout(_ workoutId: Int64, trackpointFilter: ([Trackpoint]) -> [Trackpoint]) throws {
         // Read phase — no write lock held
         let allTrackpoints = try getTrackpoints(workoutId)
+        let pulses = try getPulses(workoutId)
         let reliable = trackpointFilter(allTrackpoints)
         let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
 
@@ -44,14 +45,39 @@ extension AppDatabase {
                 "SELECT AVG(bpm) FROM pulses WHERE workout_id = ?", arguments: [workoutId])
         }
 
+        let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
+        let bestSplitSec = splits.map(\.seconds).min()
+
         // Write phase — short, just the UPDATE
         let now = Date().timeIntervalSince1970
         try dbWriter.write { db in
             try db.execute(sql: """
                 UPDATE workouts
-                SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?
+                SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?,
+                    best_split_sec = ?
                 WHERE id = ?
-                """, arguments: [now, distance, avgSecPerKm, avgBpm, workoutId])
+                """, arguments: [now, distance, avgSecPerKm, avgBpm, bestSplitSec, workoutId])
+        }
+    }
+
+    /// Backfill best_split_sec for finished workouts that don't have it yet.
+    func backfillBestSplitSec(trackpointFilter: ([Trackpoint]) -> [Trackpoint]) throws {
+        let ids: [Int64] = try dbWriter.read { db in
+            try Int64.fetchAll(db, sql:
+                "SELECT id FROM workouts WHERE finished_at IS NOT NULL AND best_split_sec IS NULL")
+        }
+        for id in ids {
+            let trackpoints = try getTrackpoints(id)
+            let pulses = try getPulses(id)
+            let reliable = trackpointFilter(trackpoints)
+            let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
+            if let best = splits.map(\.seconds).min() {
+                try dbWriter.write { db in
+                    try db.execute(sql:
+                        "UPDATE workouts SET best_split_sec = ? WHERE id = ?",
+                        arguments: [best, id])
+                }
+            }
         }
     }
 
