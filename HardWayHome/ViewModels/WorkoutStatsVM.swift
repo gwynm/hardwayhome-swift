@@ -62,6 +62,13 @@ final class WorkoutStatsVM {
         startElapsedTimer()
     }
 
+    /// Reload all stats from the database, catching up on any trackpoints/pulses
+    /// that were inserted while the app was suspended.
+    func reloadFromDatabase() {
+        guard let workoutId else { return }
+        loadInitialState(workoutId: workoutId)
+    }
+
     /// Stop observing and tear down callbacks.
     func stop() {
         locationService?.onTrackpointInserted = nil

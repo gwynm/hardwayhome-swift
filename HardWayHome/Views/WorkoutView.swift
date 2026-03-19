@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkoutView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var vm: WorkoutRecordingVM
     @State private var statsVM = WorkoutStatsVM()
     @State private var showBlePicker = false
@@ -73,6 +74,11 @@ struct WorkoutView: View {
             .onDisappear {
                 UIApplication.shared.isIdleTimerDisabled = false
                 statsVM.stop()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    statsVM.reloadFromDatabase()
+                }
             }
             .alert("Stop Workout", isPresented: $showStopAlert) {
                 Button("Cancel", role: .cancel) {}
