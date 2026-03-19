@@ -27,6 +27,7 @@ enum AppScreen: Equatable {
 
 @main
 struct HardWayHomeApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var vm = WorkoutRecordingVM()
     @State private var screen: AppScreen = .home
     @State private var isReady = false
@@ -46,6 +47,11 @@ struct HardWayHomeApp: App {
                 isReady = true
                 if vm.activeWorkout != nil {
                     screen = .workout
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    vm.heartRateService.reconnectIfNeeded()
                 }
             }
             .onChange(of: vm.activeWorkout?.id) { oldId, newId in

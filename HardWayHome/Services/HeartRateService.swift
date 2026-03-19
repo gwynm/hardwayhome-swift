@@ -116,6 +116,14 @@ final class HeartRateService: NSObject {
         centralManager?.connect(peripheral, options: nil)
     }
 
+    func reconnectIfNeeded() {
+        guard connectionState == .disconnected,
+              bleState == .poweredOn else { return }
+        appendDebug("Foreground reconnect: triggering auto-connect")
+        cancelAutoConnect()
+        autoConnectTask = Task { await autoConnect() }
+    }
+
     func disconnect() {
         cancelAutoConnect()
         cancelReconnect()
