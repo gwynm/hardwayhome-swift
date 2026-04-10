@@ -55,6 +55,38 @@ enum SplitCalc {
         }
     }
 
+    // MARK: - Checkpoint
+
+    /// Compute the best checkpoint from km splits.
+    /// A checkpoint is N consecutive km splits all ≤ some pace (multiple of 15s, ≤ 7:00).
+    /// Minimum 5 km. Faster pace beats longer distance; distance breaks ties.
+    static func computeCheckpoint(splits: [KmSplit]) -> (count: Int, paceSec: Double)? {
+        guard splits.count >= 5 else { return nil }
+
+        let times = splits.map(\.seconds)
+        let minTime = times.min()!
+        let startPace = max(Int(ceil(minTime / 15.0)) * 15, 15)
+        let maxPace = 420 // 7:00
+
+        for pace in stride(from: startPace, through: maxPace, by: 15) {
+            let threshold = Double(pace)
+            var best = 0
+            var current = 0
+            for t in times {
+                if t <= threshold {
+                    current += 1
+                    best = max(best, current)
+                } else {
+                    current = 0
+                }
+            }
+            if best >= 5 {
+                return (count: best, paceSec: threshold)
+            }
+        }
+        return nil
+    }
+
     // MARK: - Pulse helpers
 
     static func averageBpmInWindow(

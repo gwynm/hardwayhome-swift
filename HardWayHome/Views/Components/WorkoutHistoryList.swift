@@ -5,6 +5,15 @@ struct WorkoutHistoryList: View {
     let workouts: [Workout]
     let onSelect: (Int64) -> Void
 
+    /// Set of workout IDs whose checkpoint was a new best at the time.
+    private var newBestIds: Set<Int64>
+
+    init(workouts: [Workout], onSelect: @escaping (Int64) -> Void) {
+        self.workouts = workouts
+        self.onSelect = onSelect
+        self.newBestIds = Self.computeNewBests(workouts)
+    }
+
     var body: some View {
         if workouts.isEmpty {
             VStack {
@@ -22,12 +31,10 @@ struct WorkoutHistoryList: View {
                 HStack {
                     Text("DATE")
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("DISTANCE")
-                        .frame(width: 80, alignment: .trailing)
-                    Text("AV PACE")
-                        .frame(width: 62, alignment: .trailing)
-                    Text("AV BPM")
-                        .frame(width: 52, alignment: .trailing)
+                    Text("DIST")
+                        .frame(width: 70, alignment: .trailing)
+                    Text("CHECKPOINT")
+                        .frame(width: 100, alignment: .trailing)
                 }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color(white: 0.56))
@@ -49,17 +56,18 @@ struct WorkoutHistoryList: View {
                                     if workout.isStationary {
                                         Text(Formatting.formatDuration(
                                             (workout.finishedAt ?? workout.startedAt) - workout.startedAt))
-                                            .frame(width: 80, alignment: .trailing)
-                                        Text("")
-                                            .frame(width: 62, alignment: .trailing)
+                                            .frame(width: 70, alignment: .trailing)
                                     } else {
                                         Text(Formatting.formatDistance(workout.distance))
-                                            .frame(width: 80, alignment: .trailing)
-                                        Text(Formatting.formatPace(workout.avgSecPerKm))
-                                            .frame(width: 62, alignment: .trailing)
+                                            .frame(width: 70, alignment: .trailing)
                                     }
-                                    Text(Formatting.formatBpm(workout.avgBpm))
-                                        .frame(width: 52, alignment: .trailing)
+                                    let isNewBest = newBestIds.contains(workout.id ?? -1)
+                                    Text(Formatting.formatCheckpoint(
+                                        count: workout.checkpointCount,
+                                        paceSec: workout.checkpointPaceSec))
+                                        .frame(width: 100, alignment: .trailing)
+                                        .foregroundStyle(isNewBest ? .green : rowColor(for: workout))
+                                        .fontWeight(isNewBest ? .bold : .regular)
                                 }
                                 .font(.system(size: 15).monospacedDigit())
                                 .foregroundStyle(rowColor(for: workout))
@@ -84,5 +92,30 @@ struct WorkoutHistoryList: View {
             return Color(red: 1.0, green: 0.85, blue: 0.3)
         }
         return .white
+    }
+
+    /// Determine which workouts had a checkpoint that was a new best at the time.
+    /// Workouts are sorted newest-first; we process oldest-first to track the running best.
+    private static func computeNewBests(_ workouts: [Workout]) -> Set<Int64> {
+        var bestPace: Double? = nil
+        var bestCount: Int = 0
+        var result = Set<Int64>()
+
+        for workout in workouts.reversed() {
+            guard let pace = workout.checkpointPaceSec,
+                  let count = workout.checkpointCount else { continue }
+            let isBetter: Bool
+            if let bp = bestPace {
+                isBetter = pace < bp || (pace == bp && count > bestCount)
+            } else {
+                isBetter = true
+            }
+            if isBetter {
+                bestPace = pace
+                bestCount = count
+                if let id = workout.id { result.insert(id) }
+            }
+        }
+        return result
     }
 }

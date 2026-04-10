@@ -9,6 +9,8 @@ struct Workout: Codable, FetchableRecord, PersistableRecord, Sendable {
     var avgSecPerKm: Double?
     var avgBpm: Double?
     var bestSplitSec: Double?
+    var checkpointCount: Int?
+    var checkpointPaceSec: Double?
 
     static let databaseTableName = "workouts"
 
@@ -16,6 +18,8 @@ struct Workout: Codable, FetchableRecord, PersistableRecord, Sendable {
         case id, startedAt = "started_at", finishedAt = "finished_at"
         case distance, avgSecPerKm = "avg_sec_per_km", avgBpm = "avg_bpm"
         case bestSplitSec = "best_split_sec"
+        case checkpointCount = "checkpoint_count"
+        case checkpointPaceSec = "checkpoint_pace_sec"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -26,6 +30,8 @@ struct Workout: Codable, FetchableRecord, PersistableRecord, Sendable {
         case avgSecPerKm = "avg_sec_per_km"
         case avgBpm = "avg_bpm"
         case bestSplitSec = "best_split_sec"
+        case checkpointCount = "checkpoint_count"
+        case checkpointPaceSec = "checkpoint_pace_sec"
     }
 
     var isStationary: Bool {

@@ -47,6 +47,14 @@ enum Formatting {
         return "\(m):\(String(format: "%02d", s))"
     }
 
+    /// Format a checkpoint as "N x M:SS", or "--" if nil.
+    static func formatCheckpoint(count: Int?, paceSec: Double?) -> String {
+        guard let count, let pace = paceSec else { return "--" }
+        let minutes = Int(pace) / 60
+        let seconds = Int(pace) % 60
+        return "\(count) x \(minutes):\(String(format: "%02d", seconds))"
+    }
+
     /// Format BPM as a string, or "--" if nil.
     static func formatBpm(_ bpm: Double?) -> String {
         guard let b = bpm else { return "--" }

@@ -74,6 +74,13 @@ final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v7_checkpoint") { db in
+            try db.alter(table: "workouts") { t in
+                t.add(column: "checkpoint_count", .integer)
+                t.add(column: "checkpoint_pace_sec", .real)
+            }
+        }
+
         return migrator
     }
 

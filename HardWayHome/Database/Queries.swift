@@ -47,6 +47,7 @@ extension AppDatabase {
 
         let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
         let bestSplitSec = splits.map(\.seconds).min()
+        let checkpoint = SplitCalc.computeCheckpoint(splits: splits)
 
         // Write phase — short, just the UPDATE
         let now = Date().timeIntervalSince1970
@@ -54,29 +55,37 @@ extension AppDatabase {
             try db.execute(sql: """
                 UPDATE workouts
                 SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?,
-                    best_split_sec = ?
+                    best_split_sec = ?, checkpoint_count = ?, checkpoint_pace_sec = ?
                 WHERE id = ?
-                """, arguments: [now, distance, avgSecPerKm, avgBpm, bestSplitSec, workoutId])
+                """, arguments: [now, distance, avgSecPerKm, avgBpm, bestSplitSec,
+                                 checkpoint?.count, checkpoint?.paceSec, workoutId])
         }
     }
 
-    /// Backfill best_split_sec for finished workouts that don't have it yet.
+    /// Backfill best_split_sec and checkpoint for finished workouts that don't have them yet.
     func backfillBestSplitSec(trackpointFilter: ([Trackpoint]) -> [Trackpoint]) throws {
         let ids: [Int64] = try dbWriter.read { db in
             try Int64.fetchAll(db, sql:
-                "SELECT id FROM workouts WHERE finished_at IS NOT NULL AND best_split_sec IS NULL")
+                """
+                SELECT id FROM workouts
+                WHERE finished_at IS NOT NULL
+                  AND (best_split_sec IS NULL OR checkpoint_count IS NULL)
+                """)
         }
         for id in ids {
             let trackpoints = try getTrackpoints(id)
             let pulses = try getPulses(id)
             let reliable = trackpointFilter(trackpoints)
             let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
-            if let best = splits.map(\.seconds).min() {
-                try dbWriter.write { db in
-                    try db.execute(sql:
-                        "UPDATE workouts SET best_split_sec = ? WHERE id = ?",
-                        arguments: [best, id])
-                }
+            let best = splits.map(\.seconds).min()
+            let checkpoint = SplitCalc.computeCheckpoint(splits: splits)
+            try dbWriter.write { db in
+                try db.execute(sql: """
+                    UPDATE workouts
+                    SET best_split_sec = COALESCE(best_split_sec, ?),
+                        checkpoint_count = ?, checkpoint_pace_sec = ?
+                    WHERE id = ?
+                    """, arguments: [best, checkpoint?.count, checkpoint?.paceSec, id])
             }
         }
     }
@@ -128,6 +137,7 @@ extension AppDatabase {
 
         let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
         let bestSplitSec = splits.map(\.seconds).min()
+        let checkpoint = SplitCalc.computeCheckpoint(splits: splits)
 
         // Update finished_at to the latest trackpoint time (end of merged workout)
         let finishedAt = allTrackpoints.last?.createdAt
@@ -138,9 +148,10 @@ extension AppDatabase {
             try db.execute(sql: """
                 UPDATE workouts
                 SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?,
-                    best_split_sec = ?
+                    best_split_sec = ?, checkpoint_count = ?, checkpoint_pace_sec = ?
                 WHERE id = ?
-                """, arguments: [finishedAt, distance, avgSecPerKm, avgBpm, bestSplitSec, targetId])
+                """, arguments: [finishedAt, distance, avgSecPerKm, avgBpm, bestSplitSec,
+                                 checkpoint?.count, checkpoint?.paceSec, targetId])
         }
     }
 
