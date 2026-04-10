@@ -26,7 +26,7 @@ targets:
     dependencies:
       - package: GRDB
     preBuildScripts:
-      - script: "${PROJECT_DIR}/scripts/generate-build-info.sh"
+      - script: "\"${PROJECT_DIR}/scripts/generate-build-info.sh\""
         name: Generate Build Info
         basedOnDependencyAnalysis: false
     settings:
