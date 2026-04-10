@@ -81,6 +81,69 @@ extension AppDatabase {
         }
     }
 
+    /// Get the finished workout immediately before the given workout (by start time).
+    func getPreviousWorkout(_ workoutId: Int64) throws -> Workout? {
+        try dbWriter.read { db in
+            guard let workout = try Workout.fetchOne(db, key: workoutId) else { return nil }
+            return try Workout
+                .filter(Workout.Columns.finishedAt != nil)
+                .filter(Workout.Columns.startedAt < workout.startedAt)
+                .order(Workout.Columns.startedAt.desc)
+                .fetchOne(db)
+        }
+    }
+
+    /// Merge a workout into a previous one: reassign trackpoints/pulses, recalculate cache fields,
+    /// then delete the source workout.
+    func mergeWorkout(_ sourceId: Int64, into targetId: Int64,
+                      trackpointFilter: ([Trackpoint]) -> [Trackpoint]) throws {
+        // Reassign trackpoints and pulses from source to target
+        try dbWriter.write { db in
+            try db.execute(sql:
+                "UPDATE trackpoints SET workout_id = ? WHERE workout_id = ?",
+                arguments: [targetId, sourceId])
+            try db.execute(sql:
+                "UPDATE pulses SET workout_id = ? WHERE workout_id = ?",
+                arguments: [targetId, sourceId])
+            try db.execute(sql:
+                "DELETE FROM workouts WHERE id = ?", arguments: [sourceId])
+        }
+
+        // Recalculate cache fields on the merged workout (same logic as finishWorkout)
+        let allTrackpoints = try getTrackpoints(targetId)
+        let pulses = try getPulses(targetId)
+        let reliable = trackpointFilter(allTrackpoints)
+        let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
+
+        var avgSecPerKm: Double? = nil
+        if distance > 0, reliable.count >= 2 {
+            let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
+            avgSecPerKm = totalSeconds / (distance / 1000)
+        }
+
+        let avgBpm = try dbWriter.read { db in
+            try Double.fetchOne(db, sql:
+                "SELECT AVG(bpm) FROM pulses WHERE workout_id = ?", arguments: [targetId])
+        }
+
+        let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
+        let bestSplitSec = splits.map(\.seconds).min()
+
+        // Update finished_at to the latest trackpoint time (end of merged workout)
+        let finishedAt = allTrackpoints.last?.createdAt
+            ?? pulses.last?.createdAt
+            ?? Date().timeIntervalSince1970
+
+        try dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE workouts
+                SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?,
+                    best_split_sec = ?
+                WHERE id = ?
+                """, arguments: [finishedAt, distance, avgSecPerKm, avgBpm, bestSplitSec, targetId])
+        }
+    }
+
     /// Delete a workout and all its trackpoints and pulses (cascaded by FK).
     func deleteWorkout(_ workoutId: Int64) throws {
         try dbWriter.write { db in

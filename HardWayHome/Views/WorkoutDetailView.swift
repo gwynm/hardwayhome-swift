@@ -5,10 +5,15 @@ struct WorkoutDetailView: View {
     let onBack: () -> Void
 
     @State private var data: DetailData?
+    @State private var mergeInfo: MergeInfo?
+    @State private var showMergeAlert = false
+
+    private let db: AppDatabase
 
     init(workoutId: Int64, onBack: @escaping () -> Void, db: AppDatabase = .shared) {
         self.workoutId = workoutId
         self.onBack = onBack
+        self.db = db
 
         guard let workout = try? db.getWorkout(workoutId),
               workout.finishedAt != nil else {
@@ -30,6 +35,23 @@ struct WorkoutDetailView: View {
             distance: distance,
             elapsedSeconds: elapsedSeconds,
             splits: splits))
+
+        // Check if mergeable with previous workout
+        if let prev = try? db.getPreviousWorkout(workoutId),
+           let prevId = prev.id,
+           let firstTrackpoint = allTrackpoints.first,
+           let lastPrevTrackpoint = (try? db.getTrackpoints(prevId))?.last {
+            let gapSeconds = firstTrackpoint.createdAt - lastPrevTrackpoint.createdAt
+            if gapSeconds >= 0, gapSeconds <= 600 {
+                let gapMetres = Geo.haversineMetres(
+                    lastPrevTrackpoint.lat, lastPrevTrackpoint.lng,
+                    firstTrackpoint.lat, firstTrackpoint.lng)
+                _mergeInfo = State(initialValue: MergeInfo(
+                    previousWorkout: prev,
+                    gapSeconds: gapSeconds,
+                    gapMetres: gapMetres))
+            }
+        }
     }
 
     var body: some View {
@@ -86,6 +108,36 @@ struct WorkoutDetailView: View {
                         KmSplitsTable(splits: data.splits)
                         RouteMapView(trackpoints: data.trackpoints)
                     }
+
+                    if let info = mergeInfo {
+                        Button {
+                            showMergeAlert = true
+                        } label: {
+                            Label("Merge into Previous Workout", systemImage: "arrow.triangle.merge")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(.orange)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                        .alert("Merge into Previous?", isPresented: $showMergeAlert) {
+                            Button("Merge", role: .destructive) {
+                                do {
+                                    try db.mergeWorkout(workoutId, into: info.previousWorkout.id!,
+                                                        trackpointFilter: TrackpointFilter.filterReliable)
+                                } catch {
+                                    // Merge failed — stay on page
+                                    return
+                                }
+                                onBack()
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("Gap: \(Formatting.formatDuration(info.gapSeconds)) / \(Formatting.formatDistance(info.gapMetres))\n\nThis will combine both workouts and cannot be undone.")
+                        }
+                    }
                 }
                 .padding(.bottom, 40)
             }
@@ -110,5 +162,11 @@ struct WorkoutDetailView: View {
         let distance: Double
         let elapsedSeconds: Double
         let splits: [KmSplit]
+    }
+
+    struct MergeInfo {
+        let previousWorkout: Workout
+        let gapSeconds: Double
+        let gapMetres: Double
     }
 }
