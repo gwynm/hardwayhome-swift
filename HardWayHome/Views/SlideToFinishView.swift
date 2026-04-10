@@ -24,11 +24,11 @@ struct SlideToFinishView: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 // Track background
-                RoundedRectangle(cornerRadius: thumbSize / 2)
+                Rectangle()
                     .fill(Color.red.opacity(0.3))
 
                 // Progress fill
-                RoundedRectangle(cornerRadius: thumbSize / 2)
+                Rectangle()
                     .fill(Color.red)
                     .frame(width: thumbSize + dragOffset)
 
@@ -39,7 +39,7 @@ struct SlideToFinishView: View {
                     .frame(maxWidth: .infinity)
 
                 // Draggable thumb
-                Circle()
+                Rectangle()
                     .fill(.white)
                     .frame(width: thumbSize - 8, height: thumbSize - 8)
                     .overlay(

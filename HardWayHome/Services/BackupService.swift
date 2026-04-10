@@ -101,7 +101,7 @@ final class BackupService {
     ) async -> BackupResult {
         let compressedFilename = makeFilename()
         let sqliteFilename = compressedFilename.replacingOccurrences(
-            of: ".sqlite.z", with: ".sqlite")
+            of: ".sqlite.gz", with: ".sqlite")
 
         await onLog?("Creating snapshot...")
         guard let snapshotURL = createSnapshot(
@@ -165,56 +165,191 @@ final class BackupService {
         }
     }
 
-    // MARK: - Compression (streaming, handles large files without loading into memory)
+    // MARK: - Compression (gzip for universal compatibility)
+    //
+    // Produces standard gzip files (RFC 1952) that any tool can open.
+    // Also reads legacy raw-deflate .z files from older backups.
 
     nonisolated private static func compressFile(source: URL) -> URL? {
-        let dest = source.appendingPathExtension("z")
-        guard streamProcess(
-            source: source, dest: dest,
-            operation: COMPRESSION_STREAM_ENCODE
-        ) else { return nil }
-        return dest
-    }
-
-    nonisolated private static func decompressFile(
-        source: URL, dest: URL
-    ) -> Bool {
-        streamProcess(
-            source: source, dest: dest,
-            operation: COMPRESSION_STREAM_DECODE)
-    }
-
-    nonisolated private static func streamProcess(
-        source: URL, dest: URL,
-        operation: compression_stream_operation
-    ) -> Bool {
-        guard let input = FileHandle(forReadingAtPath: source.path)
-        else { return false }
+        let dest = source.appendingPathExtension("gz")
+        guard let input = FileHandle(forReadingAtPath: source.path) else { return nil }
         defer { input.closeFile() }
 
         try? FileManager.default.removeItem(at: dest)
         FileManager.default.createFile(atPath: dest.path, contents: nil)
-        guard let output = FileHandle(forWritingAtPath: dest.path)
-        else { return false }
+        guard let output = FileHandle(forWritingAtPath: dest.path) else { return nil }
         defer { output.closeFile() }
 
+        // Gzip header: magic, method=deflate, flags=0, mtime=0, xfl=0, OS=Unix
+        output.write(Data([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0x03]))
+
+        // Raw-deflate the content using Apple Compression framework
         let bufferSize = 65_536
-        let srcBuffer = UnsafeMutablePointer<UInt8>.allocate(
-            capacity: bufferSize)
-        let dstBuffer = UnsafeMutablePointer<UInt8>.allocate(
-            capacity: bufferSize)
+        let srcBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        let dstBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
         defer { srcBuffer.deallocate(); dstBuffer.deallocate() }
 
         var stream = compression_stream(
             dst_ptr: dstBuffer, dst_size: bufferSize,
             src_ptr: srcBuffer, src_size: 0, state: nil)
         guard compression_stream_init(
-            &stream, operation, COMPRESSION_ZLIB
+            &stream, COMPRESSION_STREAM_ENCODE, COMPRESSION_ZLIB
+        ) == COMPRESSION_STATUS_OK else { return nil }
+        defer { compression_stream_destroy(&stream) }
+
+        var crc: UInt32 = 0
+        var totalSize: UInt32 = 0
+        var inputDone = false
+
+        while true {
+            if stream.src_size == 0 && !inputDone {
+                let data = input.readData(ofLength: bufferSize)
+                if data.isEmpty {
+                    inputDone = true
+                } else {
+                    // Update CRC32 and size from uncompressed data
+                    data.withUnsafeBytes { buf in
+                        let bytes = buf.bindMemory(to: UInt8.self)
+                        for i in 0..<bytes.count {
+                            crc = Self.crc32Update(crc, byte: bytes[i])
+                        }
+                    }
+                    totalSize &+= UInt32(data.count)
+                    data.copyBytes(to: srcBuffer, count: data.count)
+                    stream.src_ptr = UnsafePointer(srcBuffer)
+                    stream.src_size = data.count
+                }
+            }
+            stream.dst_ptr = dstBuffer
+            stream.dst_size = bufferSize
+            let flags: Int32 = inputDone
+                ? Int32(COMPRESSION_STREAM_FINALIZE.rawValue) : 0
+            let status = compression_stream_process(&stream, flags)
+            let written = bufferSize - stream.dst_size
+            if written > 0 {
+                output.write(Data(bytes: dstBuffer, count: written))
+            }
+            if status == COMPRESSION_STATUS_END { break }
+            if status == COMPRESSION_STATUS_ERROR { return nil }
+        }
+
+        // Gzip trailer: CRC32 + uncompressed size (both little-endian uint32)
+        var trailer = Data(count: 8)
+        trailer[0] = UInt8(crc & 0xff)
+        trailer[1] = UInt8((crc >> 8) & 0xff)
+        trailer[2] = UInt8((crc >> 16) & 0xff)
+        trailer[3] = UInt8((crc >> 24) & 0xff)
+        trailer[4] = UInt8(totalSize & 0xff)
+        trailer[5] = UInt8((totalSize >> 8) & 0xff)
+        trailer[6] = UInt8((totalSize >> 16) & 0xff)
+        trailer[7] = UInt8((totalSize >> 24) & 0xff)
+        output.write(trailer)
+
+        return dest
+    }
+
+    nonisolated private static func decompressFile(
+        source: URL, dest: URL
+    ) -> Bool {
+        // Check magic bytes to distinguish gzip from legacy raw deflate
+        guard let header = FileHandle(forReadingAtPath: source.path) else { return false }
+        let magic = header.readData(ofLength: 2)
+        header.closeFile()
+
+        let isGzip = magic.count >= 2 && magic[0] == 0x1f && magic[1] == 0x8b
+        if isGzip {
+            return gzipDecompressFile(source: source, dest: dest)
+        }
+        return streamDecompress(source: source, dest: dest)
+    }
+
+    /// Decompress a standard gzip file: skip header, raw-inflate, ignore trailer.
+    nonisolated private static func gzipDecompressFile(source: URL, dest: URL) -> Bool {
+        guard var data = try? Data(contentsOf: source), data.count >= 18 else { return false }
+
+        // Parse gzip header (RFC 1952)
+        var offset = 10 // skip fixed 10-byte header
+        let flags = data[3]
+        if flags & 0x04 != 0 { // FEXTRA
+            guard offset + 2 <= data.count else { return false }
+            let xlen = Int(data[offset]) | (Int(data[offset + 1]) << 8)
+            offset += 2 + xlen
+        }
+        if flags & 0x08 != 0 { // FNAME
+            while offset < data.count && data[offset] != 0 { offset += 1 }
+            offset += 1
+        }
+        if flags & 0x10 != 0 { // FCOMMENT
+            while offset < data.count && data[offset] != 0 { offset += 1 }
+            offset += 1
+        }
+        if flags & 0x02 != 0 { offset += 2 } // FHCRC
+
+        // Strip header and 8-byte trailer, decompress the raw deflate in the middle
+        data = data.subdata(in: offset..<(data.count - 8))
+
+        try? FileManager.default.removeItem(at: dest)
+        FileManager.default.createFile(atPath: dest.path, contents: nil)
+        guard let output = FileHandle(forWritingAtPath: dest.path) else { return false }
+        defer { output.closeFile() }
+
+        let bufferSize = 65_536
+        let dstBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { dstBuffer.deallocate() }
+
+        var stream = compression_stream(
+            dst_ptr: dstBuffer, dst_size: bufferSize,
+            src_ptr: UnsafePointer<UInt8>(bitPattern: 1)!, src_size: 0, state: nil)
+        guard compression_stream_init(
+            &stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB
+        ) == COMPRESSION_STATUS_OK else { return false }
+        defer { compression_stream_destroy(&stream) }
+
+        return data.withUnsafeBytes { rawBuf -> Bool in
+            guard let base = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self)
+            else { return false }
+            stream.src_ptr = base
+            stream.src_size = data.count
+
+            while true {
+                stream.dst_ptr = dstBuffer
+                stream.dst_size = bufferSize
+                let status = compression_stream_process(
+                    &stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
+                let written = bufferSize - stream.dst_size
+                if written > 0 {
+                    output.write(Data(bytes: dstBuffer, count: written))
+                }
+                if status == COMPRESSION_STATUS_END { return true }
+                if status == COMPRESSION_STATUS_ERROR { return false }
+            }
+        }
+    }
+
+    /// Decompress legacy raw deflate (Apple Compression COMPRESSION_ZLIB) files.
+    nonisolated private static func streamDecompress(source: URL, dest: URL) -> Bool {
+        guard let input = FileHandle(forReadingAtPath: source.path) else { return false }
+        defer { input.closeFile() }
+
+        try? FileManager.default.removeItem(at: dest)
+        FileManager.default.createFile(atPath: dest.path, contents: nil)
+        guard let output = FileHandle(forWritingAtPath: dest.path) else { return false }
+        defer { output.closeFile() }
+
+        let bufferSize = 65_536
+        let srcBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        let dstBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { srcBuffer.deallocate(); dstBuffer.deallocate() }
+
+        var stream = compression_stream(
+            dst_ptr: dstBuffer, dst_size: bufferSize,
+            src_ptr: srcBuffer, src_size: 0, state: nil)
+        guard compression_stream_init(
+            &stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB
         ) == COMPRESSION_STATUS_OK else { return false }
         defer { compression_stream_destroy(&stream) }
 
         var inputDone = false
-
         while true {
             if stream.src_size == 0 && !inputDone {
                 let data = input.readData(ofLength: bufferSize)
@@ -226,27 +361,36 @@ final class BackupService {
                     stream.src_size = data.count
                 }
             }
-
             stream.dst_ptr = dstBuffer
             stream.dst_size = bufferSize
-
             let flags: Int32 = inputDone
                 ? Int32(COMPRESSION_STREAM_FINALIZE.rawValue) : 0
             let status = compression_stream_process(&stream, flags)
-
             let written = bufferSize - stream.dst_size
             if written > 0 {
                 output.write(Data(bytes: dstBuffer, count: written))
             }
-
-            if status == COMPRESSION_STATUS_END { break }
-            if status == COMPRESSION_STATUS_ERROR {
-                log.error("Compression stream error")
-                return false
-            }
+            if status == COMPRESSION_STATUS_END { return true }
+            if status == COMPRESSION_STATUS_ERROR { return false }
         }
+    }
 
-        return true
+    // MARK: - CRC32 (for gzip trailer)
+
+    nonisolated(unsafe) private static let crc32Table: [UInt32] = {
+        (0..<256).map { i -> UInt32 in
+            var c = UInt32(i)
+            for _ in 0..<8 {
+                c = (c & 1 != 0) ? (0xedb88320 ^ (c >> 1)) : (c >> 1)
+            }
+            return c
+        }
+    }()
+
+    nonisolated private static func crc32Update(_ crc: UInt32, byte: UInt8) -> UInt32 {
+        let c = crc ^ 0xffffffff
+        let idx = Int((c ^ UInt32(byte)) & 0xff)
+        return crc32Table[idx] ^ (c >> 8) ^ 0xffffffff
     }
 
     // MARK: - Local backup
@@ -398,9 +542,9 @@ final class BackupService {
             return false
         }
 
-        // Decompress if the file is a .z compressed backup
+        // Decompress if the file is a compressed backup (.gz or legacy .z)
         let sqliteURL: URL
-        let isCompressed = filename.hasSuffix(".z")
+        let isCompressed = filename.hasSuffix(".gz") || filename.hasSuffix(".z")
         if isCompressed {
             onLog("Decompressing...")
             let decompressedURL =
@@ -517,7 +661,7 @@ final class BackupService {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd'T'HH-mm-ss"
         formatter.timeZone = TimeZone(identifier: "UTC")
-        return "hardwayhome-\(formatter.string(from: Date())).sqlite.z"
+        return "hardwayhome-\(formatter.string(from: Date())).sqlite.gz"
     }
 
     nonisolated private static func fileSize(_ url: URL) -> Int {
