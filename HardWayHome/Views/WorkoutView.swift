@@ -7,6 +7,7 @@ struct WorkoutView: View {
     @State private var showBlePicker = false
     @State private var showStopAlert = false
     @State private var showDiscardAlert = false
+    @State private var resetSlider = false
 
     var body: some View {
         if vm.isSaving {
@@ -34,16 +35,10 @@ struct WorkoutView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
 
-                    // Stop button
-                    Button(action: { showStopAlert = true }) {
-                        Text("Stop")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
-                            .background(.red)
-                            .clipShape(Rectangle())
-                    }
+                    // Slide to finish
+                    SlideToFinishView(
+                        onSlideComplete: { showStopAlert = true },
+                        shouldReset: $resetSlider)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
 
@@ -81,7 +76,7 @@ struct WorkoutView: View {
                 }
             }
             .alert("Stop Workout", isPresented: $showStopAlert) {
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) { resetSlider = true }
                 Button("Finish & Save") { vm.finish() }
                 Button("Finish & Delete", role: .destructive) {
                     if statsVM.distance > 500 {

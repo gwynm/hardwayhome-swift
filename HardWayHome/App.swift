@@ -52,6 +52,12 @@ struct HardWayHomeApp: App {
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     vm.heartRateService.reconnectIfNeeded()
+                    vm.checkForRecovery()
+                }
+            }
+            .onChange(of: screen) { oldScreen, newScreen in
+                if oldScreen == .workout, newScreen != .workout {
+                    vm.checkForRecovery()
                 }
             }
             .onChange(of: vm.activeWorkout?.id) { oldId, newId in

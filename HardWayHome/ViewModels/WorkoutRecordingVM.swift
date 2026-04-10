@@ -32,16 +32,7 @@ final class WorkoutRecordingVM {
         heartRateService.initialize()
         backupService.initStatus()
 
-        // Resume active workout if app was killed mid-run
-        do {
-            if let workout = try db.getActiveWorkout() {
-                activeWorkout = workout
-                heartRateService.setActiveWorkoutId = workout.id
-                locationService.startTracking(workoutId: workout.id!)
-            }
-        } catch {
-            log.error("Failed to check for active workout: \(error)")
-        }
+        checkForRecovery()
 
         isLoading = false
 
@@ -85,6 +76,20 @@ final class WorkoutRecordingVM {
 
     func workoutHistory() throws -> [Workout] {
         try db.getWorkoutHistory()
+    }
+
+    /// Re-check the database for an active workout that this VM lost track of.
+    func checkForRecovery() {
+        guard activeWorkout == nil else { return }
+        do {
+            if let workout = try db.getActiveWorkout() {
+                activeWorkout = workout
+                heartRateService.setActiveWorkoutId = workout.id
+                locationService.startTracking(workoutId: workout.id!)
+            }
+        } catch {
+            log.error("Recovery check failed: \(error)")
+        }
     }
 
     func discard() {
