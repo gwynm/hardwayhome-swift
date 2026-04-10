@@ -104,6 +104,53 @@ struct SplitsTests {
         #expect(SplitCalc.computeCheckpoint(splits: splits) == nil)
     }
 
+    @Test("Checkpoint: exactly 5 splits at 7:00 boundary")
+    func checkpointAtMaxPace() {
+        let splits = makeSplits([420, 420, 420, 420, 420])
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp != nil)
+        #expect(cp?.count == 5)
+        #expect(cp?.paceSec == 420)
+    }
+
+    @Test("Checkpoint: mixed paces, slow one in middle still allows slower checkpoint")
+    func checkpointSlowMiddle() {
+        // 5 at 5:00, 1 at 6:00, 5 at 5:00
+        // At pace 300: runs of 5 and 5 — checkpoint is 5 x 5:00
+        // At pace 360: run of 11 — checkpoint would be 11 x 6:00
+        // Faster wins: 5 x 5:00
+        let splits = makeSplits([300, 300, 300, 300, 300, 360, 300, 300, 300, 300, 300])
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp?.paceSec == 300)
+        #expect(cp?.count == 5)
+    }
+
+    @Test("Checkpoint: prefers longer run at the same pace")
+    func checkpointLongerAtSamePace() {
+        // 8 consecutive at exactly 5:00 (300s)
+        let splits = makeSplits([300, 300, 300, 300, 300, 300, 300, 300])
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp?.count == 8)
+        #expect(cp?.paceSec == 300)
+    }
+
+    @Test("Checkpoint: splits just over threshold don't count")
+    func checkpointJustOver() {
+        // 5 splits at 315.1s — rounds up to 330, but only 315 threshold checked first
+        // At 315: none qualify. At 330: all qualify → 5 x 5:30
+        let splits = makeSplits([315.1, 315.1, 315.1, 315.1, 315.1])
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp?.paceSec == 330)
+        #expect(cp?.count == 5)
+    }
+
+    @Test("Checkpoint: exactly on 15s boundary counts at that boundary")
+    func checkpointExactBoundary() {
+        let splits = makeSplits([315, 315, 315, 315, 315])
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp?.paceSec == 315)
+    }
+
     @Test("Splits include average BPM from pulses")
     func splitsWithBpm() {
         let base = epoch("2026-02-13T11:30:00Z")

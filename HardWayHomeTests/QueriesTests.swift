@@ -124,6 +124,78 @@ struct QueriesTests {
         #expect(try db.kvGet("test_key") == nil)
     }
 
+    @Test("finishWorkout computes checkpoint for qualifying workout")
+    func finishWorkoutCheckpoint() throws {
+        let db = try makeDB()
+        let id = try db.startWorkout()
+
+        // Insert 60 trackpoints ~111m apart (each 0.001 lat), 300s per km = 5:00 pace
+        // 6 km worth → should get checkpoint "6 x 5:00" (pace 300s)
+        let base = epoch("2026-04-10T08:00:00Z")
+        for i in 0..<60 {
+            let lat = 51.5000 + Double(i) * 0.001
+            let t = base + Double(i) * 30 // ~30s between points, ~300s per km
+            try db.dbWriter.write { conn in
+                try Trackpoint(workoutId: id, createdAt: t, lat: lat, lng: -0.1, speed: 3.0, err: 5.0)
+                    .insert(conn)
+            }
+        }
+
+        try db.finishWorkout(id, trackpointFilter: { $0 })
+        let workout = try db.getWorkout(id)!
+        #expect(workout.checkpointCount != nil)
+        #expect(workout.checkpointCount! >= 5)
+        #expect(workout.checkpointPaceSec != nil)
+        #expect(workout.checkpointPaceSec! <= 420) // must be ≤ 7:00
+    }
+
+    @Test("finishWorkout sets nil checkpoint for short workout")
+    func finishWorkoutNoCheckpoint() throws {
+        let db = try makeDB()
+        let id = try db.startWorkout()
+
+        // Only 3 trackpoints — won't produce 5 splits
+        let base = epoch("2026-04-10T08:00:00Z")
+        for i in 0..<3 {
+            try db.insertTrackpoint(workoutId: id, lat: 51.5 + Double(i) * 0.001,
+                                    lng: -0.1, speed: 3.0, err: 5.0)
+        }
+
+        try db.finishWorkout(id, trackpointFilter: { $0 })
+        let workout = try db.getWorkout(id)!
+        #expect(workout.checkpointCount == nil)
+        #expect(workout.checkpointPaceSec == nil)
+    }
+
+    @Test("backfill populates checkpoint for existing workouts")
+    func backfillCheckpoint() throws {
+        let db = try makeDB()
+
+        // Create a finished workout without checkpoint (simulate pre-v7 data)
+        let id = try db.dbWriter.write { conn -> Int64 in
+            var w = Workout(startedAt: epoch("2026-04-10T08:00:00Z"),
+                            finishedAt: epoch("2026-04-10T09:00:00Z"),
+                            distance: 6000)
+            try w.insert(conn)
+            return conn.lastInsertedRowID
+        }
+
+        // Add 60 trackpoints for ~6km at ~5:00/km
+        let base = epoch("2026-04-10T08:00:00Z")
+        for i in 0..<60 {
+            try db.dbWriter.write { conn in
+                try Trackpoint(workoutId: id, createdAt: base + Double(i) * 30,
+                               lat: 51.5 + Double(i) * 0.001, lng: -0.1, speed: 3.0, err: 5.0)
+                    .insert(conn)
+            }
+        }
+
+        try db.backfillBestSplitSec(trackpointFilter: { $0 })
+        let workout = try db.getWorkout(id)!
+        #expect(workout.checkpointCount != nil)
+        #expect(workout.checkpointPaceSec != nil)
+    }
+
     @Test("Trackpoints ordered by time")
     func trackpointOrdering() throws {
         let db = try makeDB()

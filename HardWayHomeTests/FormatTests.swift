@@ -67,6 +67,22 @@ struct FormatTests {
         #expect(Formatting.formatBpm(nil as Double?) == "--")
     }
 
+    // MARK: - Checkpoint
+
+    @Test("formatCheckpoint normal values")
+    func checkpointNormal() {
+        #expect(Formatting.formatCheckpoint(count: 5, paceSec: 330) == "5 x 5:30")
+        #expect(Formatting.formatCheckpoint(count: 8, paceSec: 300) == "8 x 5:00")
+        #expect(Formatting.formatCheckpoint(count: 5, paceSec: 420) == "5 x 7:00")
+    }
+
+    @Test("formatCheckpoint nil")
+    func checkpointNil() {
+        #expect(Formatting.formatCheckpoint(count: nil, paceSec: nil) == "--")
+        #expect(Formatting.formatCheckpoint(count: 5, paceSec: nil) == "--")
+        #expect(Formatting.formatCheckpoint(count: nil, paceSec: 330) == "--")
+    }
+
     // MARK: - Date display
 
     @Test("formatDate always includes two-digit year")
