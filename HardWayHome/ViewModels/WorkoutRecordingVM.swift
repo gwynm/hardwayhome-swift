@@ -15,14 +15,14 @@ final class WorkoutRecordingVM {
     let locationService: LocationService
     let heartRateService: HeartRateService
     let backupService: BackupService
-    let watchdogService: WatchdogService
+    let watchdogService: any Watchdog
 
-    init(db: AppDatabase = .shared) {
+    init(db: AppDatabase = .shared, watchdog: (any Watchdog)? = nil) {
         self.db = db
         self.locationService = LocationService(db: db)
         self.heartRateService = HeartRateService(db: db)
         self.backupService = BackupService(db: db)
-        self.watchdogService = WatchdogService()
+        self.watchdogService = watchdog ?? WatchdogService()
         self.locationService.watchdog = self.watchdogService
     }
 

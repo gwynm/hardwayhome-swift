@@ -3,11 +3,18 @@ import os
 
 private let log = Logger(subsystem: "com.gwynmorfey.hardwayhome.native", category: "watchdog")
 
+@MainActor
+protocol Watchdog: AnyObject {
+    func requestPermission() async
+    func arm()
+    func disarm()
+}
+
 /// Dead man's switch: schedules a local notification that fires if GPS
 /// callbacks stop arriving. Each call to `arm()` resets the timer, so the
 /// notification only fires if the app is killed and doesn't relaunch.
 @MainActor
-final class WatchdogService {
+final class WatchdogService: Watchdog {
 
     private static let notificationId = "workout-watchdog"
     private static let interval: TimeInterval = 120  // 2 minutes

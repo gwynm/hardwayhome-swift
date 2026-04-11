@@ -24,7 +24,7 @@ final class LocationService: NSObject {
     var onTrackpointInserted: ((Trackpoint) -> Void)?
 
     /// Watchdog service to reset on each location callback during a workout.
-    var watchdog: WatchdogService?
+    var watchdog: (any Watchdog)?
 
     private var locationManager: CLLocationManager?
     private var activeWorkoutId: Int64? = nil
