@@ -467,6 +467,8 @@ final class BackupService {
             return false
         }
 
+        let localSize = fileSize(fileURL)
+
         var request = URLRequest(url: targetURL)
         request.httpMethod = "PUT"
         request.setValue(
@@ -477,9 +479,14 @@ final class BackupService {
             await onLog?("Auth: Basic")
         }
 
+        await onLog?("Uploading \(formatBytes(localSize))...")
+
+        let progressDelegate = UploadProgressDelegate(
+            totalSize: localSize, onLog: onLog)
+
         do {
             let (_, response) = try await URLSession.shared.upload(
-                for: request, fromFile: fileURL)
+                for: request, fromFile: fileURL, delegate: progressDelegate)
             let statusCode =
                 (response as? HTTPURLResponse)?.statusCode ?? 0
             await onLog?("Response: \(statusCode)")
@@ -488,11 +495,53 @@ final class BackupService {
                 log.error("WebDAV upload failed: HTTP \(statusCode)")
                 return false
             }
+
+            // Verify remote file size matches local file
+            let sizeOK = await verifyRemoteSize(
+                targetURL: targetURL, config: config,
+                expectedSize: localSize, onLog: onLog)
+            if !sizeOK { return false }
+
             return true
         } catch {
             log.error("WebDAV upload error: \(error)")
             await onLog?("ERROR: \(error.localizedDescription)")
             return false
+        }
+    }
+
+    nonisolated private static func verifyRemoteSize(
+        targetURL: URL, config: WebDAVConfig, expectedSize: Int,
+        onLog: (@Sendable (String) async -> Void)? = nil
+    ) async -> Bool {
+        var headReq = URLRequest(url: targetURL)
+        headReq.httpMethod = "HEAD"
+        if let auth = config.authHeader() {
+            headReq.setValue(auth, forHTTPHeaderField: "Authorization")
+        }
+        do {
+            let (_, headResponse) = try await URLSession.shared.data(
+                for: headReq)
+            let remoteSize = (headResponse as? HTTPURLResponse)?
+                .value(forHTTPHeaderField: "Content-Length")
+                .flatMap(Int.init) ?? -1
+            if remoteSize == expectedSize {
+                await onLog?(
+                    "Verified: remote size matches (\(formatBytes(expectedSize)))")
+                return true
+            } else if remoteSize < 0 {
+                await onLog?("Warning: server did not return Content-Length, skipping size check")
+                return true
+            } else {
+                await onLog?(
+                    "ERROR: Size mismatch — local \(formatBytes(expectedSize)) vs remote \(formatBytes(remoteSize))")
+                log.error(
+                    "Upload size mismatch: local \(expectedSize) vs remote \(remoteSize)")
+                return false
+            }
+        } catch {
+            await onLog?("Warning: could not verify remote size (\(error.localizedDescription))")
+            return true
         }
     }
 
@@ -669,11 +718,47 @@ final class BackupService {
             atPath: url.path)[.size] as? Int) ?? 0
     }
 
-    nonisolated private static func formatBytes(_ bytes: Int) -> String {
+    nonisolated fileprivate static func formatBytes(_ bytes: Int) -> String {
         if bytes < 1024 { return "\(bytes) B" }
         if bytes < 1_048_576 {
             return String(format: "%.1f KB", Double(bytes) / 1024)
         }
         return String(format: "%.1f MB", Double(bytes) / 1_048_576)
+    }
+}
+
+// MARK: - Upload progress delegate
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate,
+    @unchecked Sendable
+{
+    let totalSize: Int
+    let onLog: (@Sendable (String) async -> Void)?
+    // Only mutated from the URLSession delegate queue (serial), so safe.
+    private var lastReportedBucket = -1
+
+    init(totalSize: Int,
+         onLog: (@Sendable (String) async -> Void)?) {
+        self.totalSize = totalSize
+        self.onLog = onLog
+    }
+
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalSize > 0 else { return }
+        let pct = Int(totalBytesSent * 100 / Int64(totalSize))
+        // Log every 25% to avoid spamming the log
+        let bucket = pct / 25 * 25
+        guard bucket > lastReportedBucket else { return }
+        lastReportedBucket = bucket
+
+        let sent = BackupService.formatBytes(Int(totalBytesSent))
+        let total = BackupService.formatBytes(totalSize)
+        let msg = "Uploading: \(sent) / \(total) (\(pct)%)"
+        Task { await onLog?(msg) }
     }
 }
