@@ -18,6 +18,7 @@ struct WorkoutView: View {
                     .font(.system(size: 17))
                     .foregroundStyle(Color(white: 0.56))
             }
+            .accessibilityIdentifier("savingView")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let workout = vm.activeWorkout {
             ScrollView {
@@ -39,6 +40,7 @@ struct WorkoutView: View {
                     SlideToFinishView(
                         onSlideComplete: { showStopAlert = true },
                         shouldReset: $resetSlider)
+                    .accessibilityIdentifier("slideToFinish")
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
 

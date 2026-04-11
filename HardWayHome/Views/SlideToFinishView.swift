@@ -47,6 +47,7 @@ struct SlideToFinishView: View {
                             .foregroundStyle(.red)
                             .font(.system(size: 16, weight: .bold))
                     )
+                    .accessibilityIdentifier("slideThumb")
                     .padding(4)
                     .offset(x: dragOffset)
                     .gesture(

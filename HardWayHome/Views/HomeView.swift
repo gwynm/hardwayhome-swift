@@ -44,11 +44,13 @@ struct HomeView: View {
                     .background(.green)
                     .clipShape(Rectangle())
             }
+            .accessibilityIdentifier("startButton")
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
 
             // Workout history
             WorkoutHistoryList(workouts: workouts, onSelect: onSelectWorkout)
+                .accessibilityIdentifier("workoutHistory")
         }
         .onAppear { loadHistory() }
         .sheet(isPresented: $showBlePicker) {

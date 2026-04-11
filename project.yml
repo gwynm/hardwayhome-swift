@@ -69,3 +69,21 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gwynmorfey.hardwayhome.native.tests
         GENERATE_INFOPLIST_FILE: YES
+
+  HardWayHomeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - HardWayHomeUITests
+    dependencies:
+      - target: HardWayHome
+    preBuildScripts:
+      - script: |
+          xcrun simctl privacy booted grant all com.gwynmorfey.hardwayhome.native 2>/dev/null || true
+          xcrun simctl privacy booted grant location com.gwynmorfey.hardwayhome.native 2>/dev/null || true
+        name: Grant Simulator Permissions
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gwynmorfey.hardwayhome.native.uitests
+        GENERATE_INFOPLIST_FILE: YES

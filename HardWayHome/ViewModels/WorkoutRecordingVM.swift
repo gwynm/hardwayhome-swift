@@ -30,11 +30,17 @@ final class WorkoutRecordingVM {
     func initialize() async {
         _ = db
 
-        locationService.requestPermissions()
-        locationService.startMonitoring()
-        heartRateService.initialize()
+        let isUITest = ProcessInfo.processInfo.arguments.contains("--uitesting")
+
+        if isUITest {
+            try? db.clearAllWorkoutData()
+        } else {
+            locationService.requestPermissions()
+            locationService.startMonitoring()
+            heartRateService.initialize()
+            await watchdogService.requestPermission()
+        }
         backupService.initStatus()
-        await watchdogService.requestPermission()
 
         checkForRecovery()
 
