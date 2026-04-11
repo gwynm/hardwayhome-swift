@@ -15,12 +15,17 @@ final class WorkoutRecordingVM {
     let locationService: LocationService
     let heartRateService: HeartRateService
     let backupService: BackupService
+    let workoutSessionService: WorkoutSessionService
+    let watchdogService: WatchdogService
 
     init(db: AppDatabase = .shared) {
         self.db = db
         self.locationService = LocationService(db: db)
         self.heartRateService = HeartRateService(db: db)
         self.backupService = BackupService(db: db)
+        self.workoutSessionService = WorkoutSessionService()
+        self.watchdogService = WatchdogService()
+        self.locationService.watchdog = self.watchdogService
     }
 
     /// Initialize on app launch — request permissions and check for active workout.
@@ -31,6 +36,8 @@ final class WorkoutRecordingVM {
         locationService.startMonitoring()
         heartRateService.initialize()
         backupService.initStatus()
+        await workoutSessionService.requestAuthorization()
+        await watchdogService.requestPermission()
 
         checkForRecovery()
 
@@ -48,6 +55,8 @@ final class WorkoutRecordingVM {
             activeWorkout = try db.getActiveWorkout()
             heartRateService.setActiveWorkoutId = workoutId
             locationService.startTracking(workoutId: workoutId)
+            workoutSessionService.startSession()
+            watchdogService.arm()
         } catch {
             log.error("Failed to start workout: \(error)")
         }
@@ -57,9 +66,11 @@ final class WorkoutRecordingVM {
         guard let workout = activeWorkout, let id = workout.id else { return }
         locationService.stopTracking()
         heartRateService.setActiveWorkoutId = nil
+        watchdogService.disarm()
         isSaving = true
         let db = self.db
         let backupService = self.backupService
+        let sessionService = self.workoutSessionService
         Task {
             do {
                 try await Task.detached {
@@ -68,6 +79,7 @@ final class WorkoutRecordingVM {
             } catch {
                 log.error("Failed to finish workout \(id): \(error)")
             }
+            await sessionService.endSession()
             isSaving = false
             activeWorkout = nil
             Task.detached { await backupService.backupDatabase() }
@@ -83,9 +95,12 @@ final class WorkoutRecordingVM {
         guard activeWorkout == nil else { return }
         do {
             if let workout = try db.getActiveWorkout() {
+                log.info("Recovering workout \(workout.id!) started at \(workout.startedAt)")
                 activeWorkout = workout
                 heartRateService.setActiveWorkoutId = workout.id
                 locationService.startTracking(workoutId: workout.id!)
+                workoutSessionService.startSession()
+                watchdogService.arm()
             }
         } catch {
             log.error("Recovery check failed: \(error)")
@@ -96,11 +111,14 @@ final class WorkoutRecordingVM {
         guard let workout = activeWorkout, let id = workout.id else { return }
         locationService.stopTracking()
         heartRateService.setActiveWorkoutId = nil
+        watchdogService.disarm()
         do {
             try db.deleteWorkout(id)
         } catch {
             log.error("Failed to delete workout \(id): \(error)")
         }
+        let sessionService = self.workoutSessionService
+        Task { await sessionService.endSession() }
         activeWorkout = nil
     }
 }

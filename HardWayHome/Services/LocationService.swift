@@ -23,6 +23,9 @@ final class LocationService: NSObject {
     /// Called on the main actor after a trackpoint is successfully inserted.
     var onTrackpointInserted: ((Trackpoint) -> Void)?
 
+    /// Watchdog service to reset on each location callback during a workout.
+    var watchdog: WatchdogService?
+
     private var locationManager: CLLocationManager?
     private var activeWorkoutId: Int64? = nil
     private let db: AppDatabase
@@ -90,6 +93,9 @@ final class LocationService: NSObject {
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
+        // Significant-location-change monitoring triggers app relaunch if iOS
+        // kills us in the background — the normal startUpdatingLocation does not.
+        manager.startMonitoringSignificantLocationChanges()
     }
 
     func stopTracking() {
@@ -97,6 +103,7 @@ final class LocationService: NSObject {
         // Disable background updates but keep monitoring for status
         locationManager?.allowsBackgroundLocationUpdates = false
         locationManager?.showsBackgroundLocationIndicator = false
+        locationManager?.stopMonitoringSignificantLocationChanges()
     }
 
     // MARK: - Private
@@ -139,6 +146,7 @@ extension LocationService: CLLocationManagerDelegate {
                             speed: location.speed >= 0 ? location.speed : nil,
                             err: acc >= 0 ? acc : nil)
                         onTrackpointInserted?(tp)
+                        watchdog?.arm()
                     } catch {
                         log.error("Failed to insert trackpoint: \(error)")
                     }

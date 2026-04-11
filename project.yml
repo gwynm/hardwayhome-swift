@@ -47,15 +47,18 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "Hard Way Home tracks your location during workouts to calculate distance and pace."
         NSLocationWhenInUseUsageDescription: "Hard Way Home tracks your location during workouts to calculate distance and pace."
         NSBluetoothAlwaysUsageDescription: "Hard Way Home connects to your heart rate monitor during workouts."
+        NSHealthUpdateUsageDescription: "Hard Way Home saves your workouts to the Health app."
         UIBackgroundModes:
           - location
           - bluetooth-central
           - audio
+          - processing
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
     entitlements:
       path: HardWayHome/HardWayHome.entitlements
-      properties: {}
+      properties:
+        com.apple.developer.healthkit: true
 
   HardWayHomeTests:
     type: bundle.unit-test
