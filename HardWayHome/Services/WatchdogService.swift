@@ -34,8 +34,10 @@ final class WatchdogService {
         let request = UNNotificationRequest(
             identifier: Self.notificationId, content: content, trigger: trigger)
 
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error {
+        Task {
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
                 log.error("Failed to schedule watchdog notification: \(error)")
             }
         }
