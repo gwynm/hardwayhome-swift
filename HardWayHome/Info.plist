@@ -28,14 +28,11 @@
 	<string>Hard Way Home tracks your location during workouts to calculate distance and pace.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Hard Way Home tracks your location during workouts to calculate distance and pace.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Hard Way Home saves your workouts to the Health app.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>bluetooth-central</string>
 		<string>audio</string>
-		<string>processing</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
