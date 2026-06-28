@@ -1,9 +1,42 @@
 import Foundation
 import GRDB
 
+/// Cached derived fields computed from a workout's reliable trackpoints and pulses.
+/// `avg_bpm` is intentionally excluded — it's independent of the trackpoint filter.
+struct DerivedFields {
+    var distance: Double
+    var avgSecPerKm: Double?
+    var bestSplitSec: Double?
+    var checkpointCount: Int?
+    var checkpointPaceSec: Double?
+}
+
 // MARK: - Workout queries
 
 extension AppDatabase {
+
+    /// Single source of truth for a workout's cached fields, shared by finish, merge,
+    /// and the one-time recompute pass so they can never drift apart.
+    static func computeDerivedFields(
+        trackpoints: [Trackpoint], pulses: [Pulse],
+        trackpointFilter: ([Trackpoint]) -> [Trackpoint]
+    ) -> DerivedFields {
+        let reliable = trackpointFilter(trackpoints)
+        let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
+
+        var avgSecPerKm: Double? = nil
+        if distance > 0, reliable.count >= 2 {
+            let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
+            avgSecPerKm = totalSeconds / (distance / 1000)
+        }
+
+        let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
+        let checkpoint = SplitCalc.computeCheckpoint(splits: splits)
+        return DerivedFields(
+            distance: distance, avgSecPerKm: avgSecPerKm,
+            bestSplitSec: splits.map(\.seconds).min(),
+            checkpointCount: checkpoint?.count, checkpointPaceSec: checkpoint?.paceSec)
+    }
 
     /// Get the currently active workout (started but not finished), if any.
     func getActiveWorkout() throws -> Workout? {
@@ -31,23 +64,13 @@ extension AppDatabase {
         // Read phase — no write lock held
         let allTrackpoints = try getTrackpoints(workoutId)
         let pulses = try getPulses(workoutId)
-        let reliable = trackpointFilter(allTrackpoints)
-        let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
-
-        var avgSecPerKm: Double? = nil
-        if distance > 0, reliable.count >= 2 {
-            let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
-            avgSecPerKm = totalSeconds / (distance / 1000)
-        }
+        let derived = Self.computeDerivedFields(
+            trackpoints: allTrackpoints, pulses: pulses, trackpointFilter: trackpointFilter)
 
         let avgBpm = try dbWriter.read { db in
             try Double.fetchOne(db, sql:
                 "SELECT AVG(bpm) FROM pulses WHERE workout_id = ?", arguments: [workoutId])
         }
-
-        let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
-        let bestSplitSec = splits.map(\.seconds).min()
-        let checkpoint = SplitCalc.computeCheckpoint(splits: splits)
 
         // Write phase — short, just the UPDATE
         let now = Date().timeIntervalSince1970
@@ -57,8 +80,9 @@ extension AppDatabase {
                 SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?,
                     best_split_sec = ?, checkpoint_count = ?, checkpoint_pace_sec = ?
                 WHERE id = ?
-                """, arguments: [now, distance, avgSecPerKm, avgBpm, bestSplitSec,
-                                 checkpoint?.count, checkpoint?.paceSec, workoutId])
+                """, arguments: [now, derived.distance, derived.avgSecPerKm, avgBpm,
+                                 derived.bestSplitSec, derived.checkpointCount,
+                                 derived.checkpointPaceSec, workoutId])
         }
     }
 
@@ -121,23 +145,13 @@ extension AppDatabase {
         // Recalculate cache fields on the merged workout (same logic as finishWorkout)
         let allTrackpoints = try getTrackpoints(targetId)
         let pulses = try getPulses(targetId)
-        let reliable = trackpointFilter(allTrackpoints)
-        let distance = Geo.totalDistance(reliable.map { ($0.lat, $0.lng) })
-
-        var avgSecPerKm: Double? = nil
-        if distance > 0, reliable.count >= 2 {
-            let totalSeconds = reliable.last!.createdAt - reliable.first!.createdAt
-            avgSecPerKm = totalSeconds / (distance / 1000)
-        }
+        let derived = Self.computeDerivedFields(
+            trackpoints: allTrackpoints, pulses: pulses, trackpointFilter: trackpointFilter)
 
         let avgBpm = try dbWriter.read { db in
             try Double.fetchOne(db, sql:
                 "SELECT AVG(bpm) FROM pulses WHERE workout_id = ?", arguments: [targetId])
         }
-
-        let splits = SplitCalc.computeKmSplits(trackpoints: reliable, pulses: pulses)
-        let bestSplitSec = splits.map(\.seconds).min()
-        let checkpoint = SplitCalc.computeCheckpoint(splits: splits)
 
         // Update finished_at to the latest trackpoint time (end of merged workout)
         let finishedAt = allTrackpoints.last?.createdAt
@@ -150,9 +164,53 @@ extension AppDatabase {
                 SET finished_at = ?, distance = ?, avg_sec_per_km = ?, avg_bpm = ?,
                     best_split_sec = ?, checkpoint_count = ?, checkpoint_pace_sec = ?
                 WHERE id = ?
-                """, arguments: [finishedAt, distance, avgSecPerKm, avgBpm, bestSplitSec,
-                                 checkpoint?.count, checkpoint?.paceSec, targetId])
+                """, arguments: [finishedAt, derived.distance, derived.avgSecPerKm, avgBpm,
+                                 derived.bestSplitSec, derived.checkpointCount,
+                                 derived.checkpointPaceSec, targetId])
         }
+    }
+
+    /// One-time pass: recompute the cached derived fields (distance, pace, best split,
+    /// checkpoint) for every finished workout using the current trackpoint filter.
+    ///
+    /// History-list distance, the detail-view Avg Pace, the checkpoint badge and the
+    /// "new best" highlight all read these cached columns rather than recomputing on
+    /// display, so a filter change (e.g. GPS-drift removal) doesn't reach them until the
+    /// values are rewritten. Gated by a kv flag so it runs once after the upgrade.
+    /// `avg_bpm` and `started_at` are left untouched.
+    func recomputeDerivedFieldsIfNeeded(
+        flagKey: String = "recompute_drift_filter_v1",
+        trackpointFilter: ([Trackpoint]) -> [Trackpoint]
+    ) throws {
+        guard try kvGet(flagKey) == nil else { return }
+
+        let ids: [Int64] = try dbWriter.read { db in
+            try Int64.fetchAll(db, sql:
+                "SELECT id FROM workouts WHERE finished_at IS NOT NULL")
+        }
+
+        // Read + compute outside the write lock; collect small result structs only.
+        var updates: [(Int64, DerivedFields)] = []
+        for id in ids {
+            let trackpoints = try getTrackpoints(id)
+            let pulses = try getPulses(id)
+            updates.append((id, Self.computeDerivedFields(
+                trackpoints: trackpoints, pulses: pulses, trackpointFilter: trackpointFilter)))
+        }
+
+        try dbWriter.write { db in
+            for (id, d) in updates {
+                try db.execute(sql: """
+                    UPDATE workouts
+                    SET distance = ?, avg_sec_per_km = ?,
+                        best_split_sec = ?, checkpoint_count = ?, checkpoint_pace_sec = ?
+                    WHERE id = ?
+                    """, arguments: [d.distance, d.avgSecPerKm, d.bestSplitSec,
+                                     d.checkpointCount, d.checkpointPaceSec, id])
+            }
+        }
+
+        try kvSet(flagKey, value: "done")
     }
 
     /// Delete a workout and all its trackpoints and pulses (cascaded by FK).
