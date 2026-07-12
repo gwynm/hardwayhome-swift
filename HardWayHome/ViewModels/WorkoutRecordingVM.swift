@@ -48,8 +48,9 @@ final class WorkoutRecordingVM {
 
         let db = self.db
         Task.detached(priority: .utility) {
-            // One-time rewrite of cached fields after the GPS-drift filter upgrade, then
-            // the ongoing backfill for any workout still missing split/checkpoint data.
+            // One-time rewrite of cached fields after a filter or derived-field rule
+            // change, then the ongoing backfill for any workout still missing
+            // split/checkpoint data.
             try? db.recomputeDerivedFieldsIfNeeded(trackpointFilter: TrackpointFilter.filterReliable)
             try? db.backfillBestSplitSec(trackpointFilter: TrackpointFilter.filterReliable)
         }

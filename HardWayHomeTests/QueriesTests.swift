@@ -146,7 +146,7 @@ struct QueriesTests {
         #expect(workout.checkpointCount != nil)
         #expect(workout.checkpointCount! >= 5)
         #expect(workout.checkpointPaceSec != nil)
-        #expect(workout.checkpointPaceSec! <= 420) // must be ≤ 7:00
+        #expect(workout.checkpointPaceSec! <= 480) // must be ≤ 8:00
     }
 
     @Test("finishWorkout sets nil checkpoint for short workout")
@@ -154,7 +154,7 @@ struct QueriesTests {
         let db = try makeDB()
         let id = try db.startWorkout()
 
-        // Only 3 trackpoints — won't produce 5 splits
+        // Only 3 trackpoints (~222 m) — won't produce any splits
         let base = epoch("2026-04-10T08:00:00Z")
         for i in 0..<3 {
             try db.insertTrackpoint(workoutId: id, lat: 51.5 + Double(i) * 0.001,

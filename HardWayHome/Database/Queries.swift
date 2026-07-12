@@ -176,10 +176,11 @@ extension AppDatabase {
     /// History-list distance, the detail-view Avg Pace, the checkpoint badge and the
     /// "new best" highlight all read these cached columns rather than recomputing on
     /// display, so a filter change (e.g. GPS-drift removal) doesn't reach them until the
-    /// values are rewritten. Gated by a kv flag so it runs once after the upgrade.
+    /// values are rewritten. Gated by a kv flag so it runs once after the upgrade —
+    /// bump the default key whenever the filter or derived-field rules change.
     /// `avg_bpm` and `started_at` are left untouched.
     func recomputeDerivedFieldsIfNeeded(
-        flagKey: String = "recompute_drift_filter_v1",
+        flagKey: String = "recompute_v2_checkpoint_2km",
         trackpointFilter: ([Trackpoint]) -> [Trackpoint]
     ) throws {
         guard try kvGet(flagKey) == nil else { return }

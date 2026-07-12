@@ -30,6 +30,14 @@ final class WorkoutStatsVM {
     private var allPulses: [Pulse] = []
     private var splitState = SplitCalc.SplitState()
 
+    /// High-water mark of km splits already beeped for. `reloadFromDatabase` re-runs the
+    /// full drift filter and can retroactively shrink `splits`; without this, re-crossing
+    /// the same km boundary would beep a second time.
+    private var beepedKmCount = 0
+
+    /// Injectable for tests; production plays the km-split beep.
+    var playBeep: () -> Void = { SoundService.shared.playBeep() }
+
     // Service references for callback teardown
     private weak var locationService: LocationService?
     private weak var heartRateService: HeartRateService?
@@ -50,6 +58,7 @@ final class WorkoutStatsVM {
         self.locationService = locationService
         self.heartRateService = heartRateService
 
+        beepedKmCount = 0
         loadInitialState(workoutId: workoutId)
 
         locationService.onTrackpointInserted = { [weak self] tp in
@@ -96,12 +105,12 @@ final class WorkoutStatsVM {
         pace100m = PaceCalc.paceOverWindow(trackpoints, windowMetres: 100)
         pace1000m = PaceCalc.paceOverWindow(trackpoints, windowMetres: 1000)
 
-        let prevCount = splitState.splits.count
         splitState.advance(newTrackpoint: tp, pulses: allPulses)
         splits = splitState.splits
 
-        if splits.count > prevCount {
-            SoundService.shared.playBeep()
+        if splits.count > beepedKmCount {
+            beepedKmCount = splits.count
+            playBeep()
         }
 
         updateElapsed()
@@ -133,6 +142,8 @@ final class WorkoutStatsVM {
                 splitState.advance(newTrackpoint: tp, pulses: allPulses)
             }
             splits = splitState.splits
+            // Never lower the mark: a reload that filters points out must not re-arm the beep.
+            beepedKmCount = max(beepedKmCount, splits.count)
 
             let now = Date().timeIntervalSince1970
             bpm5s = avgBpm(lastSeconds: 5, now: now)
