@@ -1,4 +1,5 @@
 import Testing
+import MapKit
 @testable import HardWayHome
 
 @Suite("Workout Stats VM")
@@ -19,6 +20,8 @@ struct WorkoutStatsVMTests {
     func beepMonotonicAcrossReload() throws {
         let db = try makeDB()
         let vm = WorkoutStatsVM(db: db)
+        // Trackpoint updates trigger return-route fetches; never hit the real API.
+        vm.returnRoute.router = StubRouter(.failure(MKError(.serverFailure)))
         var beeps = 0
         vm.playBeep = { beeps += 1 }
 

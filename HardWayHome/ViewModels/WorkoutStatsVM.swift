@@ -21,6 +21,17 @@ final class WorkoutStatsVM {
     var trackpoints: [Trackpoint] = []
     var splits: [KmSplit] = []
 
+    /// Distance back to the start point, routed when possible.
+    let returnRoute = ReturnRouteService()
+
+    var returnDistance: Double? { returnRoute.estimate?.metres }
+    var returnIsCrowFlies: Bool { returnRoute.estimate?.isCrowFlies ?? false }
+    /// Seconds to get home at the current 1 km pace.
+    var returnEtaSeconds: Double? {
+        guard let metres = returnDistance, let pace = pace1000m else { return nil }
+        return metres / 1000 * pace
+    }
+
     private var timer: Timer?
     private var workoutId: Int64?
     private var startedAtEpoch: TimeInterval?
@@ -59,6 +70,7 @@ final class WorkoutStatsVM {
         self.heartRateService = heartRateService
 
         beepedKmCount = 0
+        returnRoute.reset()
         loadInitialState(workoutId: workoutId)
 
         locationService.onTrackpointInserted = { [weak self] tp in
@@ -105,6 +117,12 @@ final class WorkoutStatsVM {
         pace100m = PaceCalc.paceOverWindow(trackpoints, windowMetres: 100)
         pace1000m = PaceCalc.paceOverWindow(trackpoints, windowMetres: 1000)
 
+        if let start = trackpoints.first, trackpoints.count >= 2 {
+            returnRoute.noteLocation(startLat: start.lat, startLng: start.lng,
+                                     currentLat: tp.lat, currentLng: tp.lng,
+                                     now: tp.createdAt)
+        }
+
         splitState.advance(newTrackpoint: tp, pulses: allPulses)
         splits = splitState.splits
 
@@ -144,6 +162,14 @@ final class WorkoutStatsVM {
             splits = splitState.splits
             // Never lower the mark: a reload that filters points out must not re-arm the beep.
             beepedKmCount = max(beepedKmCount, splits.count)
+
+            if let start = reliable.first, let last = reliable.last, reliable.count >= 2 {
+                // Trackpoint time, not wall time — keeps the refresh gate in one
+                // clock domain with onTrackpoint updates.
+                returnRoute.noteLocation(startLat: start.lat, startLng: start.lng,
+                                         currentLat: last.lat, currentLng: last.lng,
+                                         now: last.createdAt)
+            }
 
             let now = Date().timeIntervalSince1970
             bpm5s = avgBpm(lastSeconds: 5, now: now)
