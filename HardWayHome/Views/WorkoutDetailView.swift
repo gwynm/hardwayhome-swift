@@ -25,6 +25,7 @@ struct WorkoutDetailView: View {
         let trackpoints = TrackpointFilter.filterReliable(allTrackpoints)
         let pulses = (try? db.getPulses(workoutId)) ?? []
         let distance = PaceCalc.trackpointDistance(trackpoints)
+        let rawDistance = PaceCalc.trackpointDistance(allTrackpoints)
         let elapsedSeconds = max(0, workout.finishedAt! - workout.startedAt)
         let splits = SplitCalc.computeKmSplits(trackpoints: trackpoints, pulses: pulses)
 
@@ -33,6 +34,7 @@ struct WorkoutDetailView: View {
             trackpoints: trackpoints,
             pulses: pulses,
             distance: distance,
+            rawDistance: rawDistance,
             elapsedSeconds: elapsedSeconds,
             splits: splits))
 
@@ -138,6 +140,14 @@ struct WorkoutDetailView: View {
                             Text("Gap: \(Formatting.formatDuration(info.gapSeconds)) / \(Formatting.formatDistance(info.gapMetres))\n\nThis will combine both workouts and cannot be undone.")
                         }
                     }
+
+                    // Debug: unfiltered GPS distance and how much the reliability/drift
+                    // filter removed from the displayed figure.
+                    Text("Raw \(Formatting.formatDistance(data.rawDistance)) · filter cut \(Formatting.formatDistance(data.rawDistance - data.distance))")
+                        .font(.system(size: 12).monospacedDigit())
+                        .foregroundStyle(Color(white: 0.4))
+                        .padding(.top, 24)
+                        .accessibilityIdentifier("rawDistanceDebug")
                 }
                 .padding(.bottom, 40)
             }
@@ -160,6 +170,7 @@ struct WorkoutDetailView: View {
         let trackpoints: [Trackpoint]
         let pulses: [Pulse]
         let distance: Double
+        let rawDistance: Double
         let elapsedSeconds: Double
         let splits: [KmSplit]
     }

@@ -51,7 +51,10 @@ struct WorkoutView: View {
                         pace100m: statsVM.pace100m,
                         pace1000m: statsVM.pace1000m,
                         bpm5s: statsVM.bpm5s,
-                        bpm60s: statsVM.bpm60s)
+                        bpm60s: statsVM.bpm60s,
+                        returnDistance: statsVM.returnDistance,
+                        returnIsCrowFlies: statsVM.returnIsCrowFlies,
+                        returnEtaSeconds: statsVM.returnEtaSeconds)
                     .padding(.horizontal, 16)
 
                     // Km splits

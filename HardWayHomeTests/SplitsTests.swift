@@ -56,10 +56,18 @@ struct SplitsTests {
         #expect(cp?.paceSec == 330)
     }
 
-    @Test("Checkpoint: fewer than 5 splits returns nil")
+    @Test("Checkpoint: a single split returns nil")
     func checkpointTooFew() {
-        let splits = makeSplits([300, 300, 300, 300])
+        let splits = makeSplits([300])
         #expect(SplitCalc.computeCheckpoint(splits: splits) == nil)
+    }
+
+    @Test("Checkpoint: 2 consecutive splits is the minimum")
+    func checkpointMinimumTwo() {
+        let splits = makeSplits([420, 420])
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp?.count == 2)
+        #expect(cp?.paceSec == 420)
     }
 
     @Test("Checkpoint: faster beats longer")
@@ -72,9 +80,9 @@ struct SplitsTests {
         #expect(cp?.count == 5)
     }
 
-    @Test("Checkpoint: all splits slower than 7:00 returns nil")
+    @Test("Checkpoint: all splits slower than 8:00 returns nil")
     func checkpointTooSlow() {
-        let splits = makeSplits([430, 430, 430, 430, 430])
+        let splits = makeSplits([490, 490, 490, 490, 490])
         #expect(SplitCalc.computeCheckpoint(splits: splits) == nil)
     }
 
@@ -97,20 +105,21 @@ struct SplitsTests {
 
     @Test("Checkpoint: gap breaks consecutive run")
     func checkpointGapBreaks() {
-        // 3 fast, 1 slow, 3 fast — no 5 consecutive at the fast pace
+        // 3 fast, 1 slow, 3 fast — the 500s split (> 8:00) breaks the run,
+        // leaving two runs of 3 at 5:00
         let splits = makeSplits([300, 300, 300, 500, 300, 300, 300])
-        // At 420 (7:00): [300, 300, 300, X, 300, 300, 300] — longest run is 3, not enough
-        // 500 > 420, so no checkpoint at any pace
-        #expect(SplitCalc.computeCheckpoint(splits: splits) == nil)
+        let cp = SplitCalc.computeCheckpoint(splits: splits)
+        #expect(cp?.count == 3)
+        #expect(cp?.paceSec == 300)
     }
 
-    @Test("Checkpoint: exactly 5 splits at 7:00 boundary")
+    @Test("Checkpoint: exactly 5 splits at 8:00 boundary")
     func checkpointAtMaxPace() {
-        let splits = makeSplits([420, 420, 420, 420, 420])
+        let splits = makeSplits([480, 480, 480, 480, 480])
         let cp = SplitCalc.computeCheckpoint(splits: splits)
         #expect(cp != nil)
         #expect(cp?.count == 5)
-        #expect(cp?.paceSec == 420)
+        #expect(cp?.paceSec == 480)
     }
 
     @Test("Checkpoint: mixed paces, slow one in middle still allows slower checkpoint")

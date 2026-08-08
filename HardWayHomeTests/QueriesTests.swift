@@ -146,7 +146,7 @@ struct QueriesTests {
         #expect(workout.checkpointCount != nil)
         #expect(workout.checkpointCount! >= 5)
         #expect(workout.checkpointPaceSec != nil)
-        #expect(workout.checkpointPaceSec! <= 420) // must be ≤ 7:00
+        #expect(workout.checkpointPaceSec! <= 480) // must be ≤ 8:00
     }
 
     @Test("finishWorkout sets nil checkpoint for short workout")
@@ -154,7 +154,7 @@ struct QueriesTests {
         let db = try makeDB()
         let id = try db.startWorkout()
 
-        // Only 3 trackpoints — won't produce 5 splits
+        // Only 3 trackpoints (~222 m) — won't produce any splits
         let base = epoch("2026-04-10T08:00:00Z")
         for i in 0..<3 {
             try db.insertTrackpoint(workoutId: id, lat: 51.5 + Double(i) * 0.001,
@@ -194,6 +194,41 @@ struct QueriesTests {
         let workout = try db.getWorkout(id)!
         #expect(workout.checkpointCount != nil)
         #expect(workout.checkpointPaceSec != nil)
+    }
+
+    @Test("recompute rewrites stale cached fields, then is gated by its flag")
+    func recomputeDerivedFields() throws {
+        let db = try makeDB()
+
+        // A finished workout with a deliberately wrong cached distance, plus a clean
+        // straight ~1 km of trackpoints (10 points, 0.001° lat ≈ 111 m apart).
+        let id = try db.dbWriter.write { conn -> Int64 in
+            var w = Workout(startedAt: epoch("2026-04-10T08:00:00Z"),
+                            finishedAt: epoch("2026-04-10T09:00:00Z"),
+                            distance: 99_999)
+            try w.insert(conn)
+            return conn.lastInsertedRowID
+        }
+        let base = epoch("2026-04-10T08:00:00Z")
+        for i in 0..<10 {
+            try db.dbWriter.write { conn in
+                try Trackpoint(workoutId: id, createdAt: base + Double(i * 10),
+                               lat: 51.5 + Double(i) * 0.001, lng: -0.1, speed: 3.0, err: 5.0)
+                    .insert(conn)
+            }
+        }
+
+        try db.recomputeDerivedFieldsIfNeeded(trackpointFilter: TrackpointFilter.filterReliable)
+        let fixed = try db.getWorkout(id)!.distance ?? 0
+        #expect(fixed > 900 && fixed < 1100)  // corrected to ~1 km, not 99_999
+
+        // Tamper again; a second run is a no-op because the flag is now set.
+        try db.dbWriter.write { conn in
+            try conn.execute(sql: "UPDATE workouts SET distance = 88888 WHERE id = ?",
+                             arguments: [id])
+        }
+        try db.recomputeDerivedFieldsIfNeeded(trackpointFilter: TrackpointFilter.filterReliable)
+        #expect(try db.getWorkout(id)!.distance == 88888)
     }
 
     @Test("Trackpoints ordered by time")

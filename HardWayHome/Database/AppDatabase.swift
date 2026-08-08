@@ -8,12 +8,41 @@ final class AppDatabase: Sendable {
 
     init(_ dbWriter: any DatabaseWriter) throws {
         self.dbWriter = dbWriter
+        let migrator = self.migrator
+
+        #if DEBUG && targetEnvironment(simulator)
+        // Auto-erase (enabled below) is for disposable dev databases only. If this
+        // one holds real workouts — e.g. production data restored onto a simulator —
+        // stop before GRDB wipes it. This runs before any UI exists, so a crash with
+        // a clear message stands in for a confirmation dialog.
+        if try dbWriter.read(migrator.hasSchemaChanges), Self.containsWorkouts(dbWriter) {
+            fatalError("""
+                Migration schema changed, but the database contains workouts — \
+                refusing to auto-erase. Delete the app (or the database file) \
+                manually if the data is disposable.
+                """)
+        }
+        #endif
+
         try migrator.migrate(dbWriter)
+    }
+
+    private static func containsWorkouts(_ dbWriter: any DatabaseWriter) -> Bool {
+        do {
+            return try dbWriter.read { db in
+                (try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM workouts") ?? 0) > 0
+            }
+        } catch {
+            return false // no workouts table yet — fresh database
+        }
     }
 
     private var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
-        #if DEBUG
+        // Never on a physical device: a schema-text mismatch (the live db was
+        // created by an older migration lineage than a fresh one produces) once
+        // made a Debug install silently erase all real workout data.
+        #if DEBUG && targetEnvironment(simulator)
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
 
